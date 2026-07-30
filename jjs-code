@@ -1,6 +1,8 @@
--- JJK Chase GUI - TELEPORT sau lưng
+-- JJK Chase GUI - BAY NHANH + HIỂN THỊ TÊN GỐC
 local Player = game.Players.LocalPlayer
+local RunService = game.RunService
 local UserInputService = game.UserInputService
+local TweenService = game.TweenService
 
 local isActive = false
 local targetPlayer = nil
@@ -8,7 +10,24 @@ local gui = nil
 local dragging = false
 local dragStart = nil
 local startPos = nil
-local connection = nil
+local noclipEnabled = false
+
+-- Noclip function
+local function noclip()
+    noclipEnabled = true
+    task.spawn(function()
+        while noclipEnabled do
+            if Player.Character then
+                for _, part in pairs(Player.Character:GetDescendants()) do
+                    if part:IsA("BasePart") and part.CanCollide == true then
+                        part.CanCollide = false
+                    end
+                end
+            end
+            task.wait()
+        end
+    end)
+end
 
 -- Tạo GUI
 local function createGUI()
@@ -20,7 +39,7 @@ local function createGUI()
     
     local main = Instance.new("Frame")
     main.Name = "Main"
-    main.Size = UDim2.new(0, 300, 0, 350)
+    main.Size = UDim2.new(0, 300, 0, 380)
     main.Position = UDim2.new(0, 100, 0, 100)
     main.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
     main.BorderSizePixel = 0
@@ -97,7 +116,7 @@ local function createGUI()
         end
     end)
     
-    -- Selected target display
+    -- Selected target
     local selFrame = Instance.new("Frame")
     selFrame.Size = UDim2.new(1, -30, 0, 35)
     selFrame.Position = UDim2.new(0, 15, 0, 50)
@@ -131,10 +150,58 @@ local function createGUI()
     selName.TextXAlignment = Enum.TextXAlignment.Left
     selName.Parent = selFrame
     
+    -- Noclip toggle
+    local noclipFrame = Instance.new("Frame")
+    noclipFrame.Size = UDim2.new(1, -30, 0, 35)
+    noclipFrame.Position = UDim2.new(0, 15, 0, 92)
+    noclipFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    noclipFrame.BackgroundTransparency = 0.6
+    noclipFrame.BorderSizePixel = 0
+    noclipFrame.Parent = main
+    
+    Instance.new("UICorner", noclipFrame).CornerRadius = UDim.new(0, 6)
+    
+    local noclipLabel = Instance.new("TextLabel")
+    noclipLabel.Size = UDim2.new(0, 120, 1, 0)
+    noclipLabel.Position = UDim2.new(0, 10, 0, 0)
+    noclipLabel.BackgroundTransparency = 1
+    noclipLabel.Text = "👻 Noclip"
+    noclipLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+    noclipLabel.Font = Enum.Font.GothamSemibold
+    noclipLabel.TextSize = 12
+    noclipLabel.TextXAlignment = Enum.TextXAlignment.Left
+    noclipLabel.Parent = noclipFrame
+    
+    local noclipBtn = Instance.new("TextButton")
+    noclipBtn.Name = "NoclipBtn"
+    noclipBtn.Size = UDim2.new(0, 50, 0, 22)
+    noclipBtn.Position = UDim2.new(1, -60, 0.5, -11)
+    noclipBtn.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+    noclipBtn.Text = "OFF"
+    noclipBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    noclipBtn.Font = Enum.Font.GothamBold
+    noclipBtn.TextSize = 11
+    noclipBtn.AutoButtonColor = false
+    noclipBtn.Parent = noclipFrame
+    
+    Instance.new("UICorner", noclipBtn).CornerRadius = UDim.new(0, 4)
+    
+    noclipBtn.MouseButton1Click:Connect(function()
+        if noclipEnabled then
+            noclipEnabled = false
+            noclipBtn.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+            noclipBtn.Text = "OFF"
+        else
+            noclip()
+            noclipBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+            noclipBtn.Text = "ON"
+        end
+    end)
+    
     -- List label
     local listLabel = Instance.new("TextLabel")
     listLabel.Size = UDim2.new(1, -30, 0, 18)
-    listLabel.Position = UDim2.new(0, 15, 0, 92)
+    listLabel.Position = UDim2.new(0, 15, 0, 134)
     listLabel.BackgroundTransparency = 1
     listLabel.Text = "📋 Danh sách người chơi"
     listLabel.TextColor3 = Color3.fromRGB(170, 170, 255)
@@ -146,8 +213,8 @@ local function createGUI()
     -- Player list
     local scroll = Instance.new("ScrollingFrame")
     scroll.Name = "PlayerScroll"
-    scroll.Size = UDim2.new(1, -30, 0, 120)
-    scroll.Position = UDim2.new(0, 15, 0, 112)
+    scroll.Size = UDim2.new(1, -30, 0, 100)
+    scroll.Position = UDim2.new(0, 15, 0, 154)
     scroll.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     scroll.BackgroundTransparency = 0.7
     scroll.BorderSizePixel = 0
@@ -164,14 +231,14 @@ local function createGUI()
     
     -- Refresh
     local refreshBtn = Instance.new("TextButton")
-    refreshBtn.Size = UDim2.new(1, -30, 0, 30)
-    refreshBtn.Position = UDim2.new(0, 15, 0, 238)
+    refreshBtn.Size = UDim2.new(1, -30, 0, 25)
+    refreshBtn.Position = UDim2.new(0, 15, 0, 258)
     refreshBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
     refreshBtn.BackgroundTransparency = 0.8
-    refreshBtn.Text = "🔄 Làm mới danh sách"
+    refreshBtn.Text = "🔄 Làm mới"
     refreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     refreshBtn.Font = Enum.Font.GothamSemibold
-    refreshBtn.TextSize = 11
+    refreshBtn.TextSize = 10
     refreshBtn.Parent = main
     
     Instance.new("UICorner", refreshBtn).CornerRadius = UDim.new(0, 6)
@@ -183,7 +250,7 @@ local function createGUI()
     -- Status
     local statusFrame = Instance.new("Frame")
     statusFrame.Size = UDim2.new(1, -30, 0, 35)
-    statusFrame.Position = UDim2.new(0, 15, 0, 275)
+    statusFrame.Position = UDim2.new(0, 15, 0, 290)
     statusFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     statusFrame.BackgroundTransparency = 0.6
     statusFrame.BorderSizePixel = 0
@@ -216,7 +283,7 @@ local function createGUI()
     local toggleBtn = Instance.new("TextButton")
     toggleBtn.Name = "ToggleBtn"
     toggleBtn.Size = UDim2.new(1, -30, 0, 35)
-    toggleBtn.Position = UDim2.new(0, 15, 0, 315)
+    toggleBtn.Position = UDim2.new(0, 15, 0, 330)
     toggleBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
     toggleBtn.Text = "▶ KÍCH HOẠT"
     toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -252,10 +319,17 @@ function updatePlayerList()
             btn.Size = UDim2.new(1, 0, 0, 28)
             btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
             btn.BackgroundTransparency = 0.95
-            btn.Text = "  " .. p.DisplayName
+            
+            -- HIỂN THỊ TÊN GỐC + DISPLAY NAME
+            local displayText = p.DisplayName
+            if p.DisplayName ~= p.Name then
+                displayText = p.DisplayName .. " (@" .. p.Name .. ")"
+            end
+            btn.Text = "  " .. displayText
+            
             btn.TextColor3 = Color3.fromRGB(200, 200, 200)
             btn.Font = Enum.Font.Gotham
-            btn.TextSize = 12
+            btn.TextSize = 11
             btn.TextXAlignment = Enum.TextXAlignment.Left
             btn.AutoButtonColor = false
             btn.Parent = scroll
@@ -271,12 +345,19 @@ end
 
 function selectPlayer(p)
     local selName = gui.Main:FindFirstChild("SelectedName", true)
-    if selName then selName.Text = p.Name end
+    if selName then
+        -- HIỂN THỊ TÊN GỐC + DISPLAY NAME
+        if p.DisplayName ~= p.Name then
+            selName.Text = p.DisplayName .. " (@" .. p.Name .. ")"
+        else
+            selName.Text = p.DisplayName
+        end
+    end
     
     local scroll = gui.Main.PlayerScroll
     for _, btn in pairs(scroll:GetChildren()) do
         if btn:IsA("TextButton") then
-            if btn.Text == "  " .. p.DisplayName then
+            if btn.Text:find(p.Name) then
                 btn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
                 btn.BackgroundTransparency = 0.5
                 btn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -324,7 +405,13 @@ function toggleChase()
             return
         end
         
-        local tp = game.Players:FindFirstChild(selName.Text)
+        -- Tìm player từ tên gốc
+        local targetName = selName.Text
+        if targetName:find("@") then
+            targetName = targetName:match("@(.+)%)") or targetName
+        end
+        
+        local tp = game.Players:FindFirstChild(targetName)
         if not tp then
             notify("⚠️ Không tìm thấy người chơi!")
             return
@@ -344,7 +431,6 @@ function toggleChase()
         statusText.Text = "Đang bám: " .. tp.DisplayName
         
         notify("✅ Bắt đầu bám sát " .. tp.DisplayName)
-        tpLoop()
     else
         isActive = false
         targetPlayer = nil
@@ -358,36 +444,56 @@ function toggleChase()
     end
 end
 
--- TELEPORT ra sau lưng
-function tpLoop()
-    task.spawn(function()
-        while isActive and targetPlayer do
-            local char = Player.Character
-            local tChar = targetPlayer.Character
+-- BAY NHANH + ĐÚNG SAU LƯNG
+local function flyToTarget()
+    RunService.RenderStepped:Connect(function()
+        if not isActive or not targetPlayer then return end
+        
+        local char = Player.Character
+        local tChar = targetPlayer.Character
+        
+        if char and tChar then
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local tHrp = tChar:FindFirstChild("HumanoidRootPart")
             
-            if char and tChar then
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                local tHrp = tChar:FindFirstChild("HumanoidRootPart")
+            if hrp and tHrp then
+                -- Vị trí SAU LƯNG target (dùng CFrame)
+                local dist = 5
+                local behindPos = tHrp.CFrame:PointToWorldSpace(Vector3.new(0, 0, dist))
                 
-                if hrp and tHrp then
-                    -- Tính vị trí sau lưng target
-                    local dist = 5
-                    local lv = tHrp.CFrame.LookVector
-                    local behindPos = tHrp.Position - (lv * dist)
-                    
-                    -- TELEPORT
-                    hrp.CFrame = CFrame.new(behindPos, tHrp.Position)
-                    
-                    -- Update status
-                    local statusText = gui.Main:FindFirstChild("StatusText", true)
-                    if statusText then
-                        local d = math.floor((hrp.Position - tHrp.Position).Magnitude)
-                        statusText.Text = "Đang bám: " .. targetPlayer.DisplayName .. " (" .. d .. "m)"
+                -- Xóa BodyVelocity/BodyGyro cũ
+                for _, v in pairs(hrp:GetChildren()) do
+                    if v:IsA("BodyVelocity") or v:IsA("BodyGyro") then
+                        v:Destroy()
                     end
                 end
+                
+                -- Tính velocity NHANH hơn
+                local direction = behindPos - hrp.Position
+                
+                -- BodyVelocity để bay NHANH
+                local bv = Instance.new("BodyVelocity")
+                bv.MaxForce = Vector3.new(1e8, 1e8, 1e8)
+                bv.Velocity = direction * 20  -- TỐC ĐỘ BAY (20 = nhanh)
+                bv.Parent = hrp
+                
+                -- BodyGyro để xoay mặt
+                local bg = Instance.new("BodyGyro")
+                bg.MaxTorque = Vector3.new(1e8, 1e8, 1e8)
+                bg.CFrame = CFrame.new(hrp.Position, tHrp.Position)
+                bg.Parent = hrp
+                
+                -- Cleanup
+                game.Debris:AddItem(bv, 0.1)
+                game.Debris:AddItem(bg, 0.1)
+                
+                -- Update status
+                local statusText = gui.Main:FindFirstChild("StatusText", true)
+                if statusText then
+                    local d = math.floor((hrp.Position - tHrp.Position).Magnitude)
+                    statusText.Text = "Đang bám: " .. targetPlayer.DisplayName .. " (" .. d .. "m)"
+                end
             end
-            
-            task.wait()
         end
     end)
 end
@@ -407,4 +513,5 @@ end)
 local main = createGUI()
 gui = {Main = main}
 updatePlayerList()
-notify("👁️ Script loaded! F5 to open")
+flyToTarget()
+notify("👁️ Script loaded! F5 to open | Speed x20")
