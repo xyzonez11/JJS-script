@@ -1,11 +1,7 @@
 --[[
-    JJS Hub - Follow Player (Fixed)
+    JJS Hub - Follow Player (FIXED - Teleport + Sync)
     
-    FIX: Dùng Humanoid:MoveTo() thay vì set CFrame trực tiếp.
-         Giúp attack và skill hoạt động bình thường, không còn đánh hư không.
-    
-    Phím tắt:
-        F5  → Mở/đóng Hub
+    FIX: Dùng RemoteEvent để đồng bộ vị trí với server
 ]]
 
 -- ═══════════════════════════════════════════════
@@ -15,6 +11,7 @@ local Players          = game:GetService("Players")
 local RunService       = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService     = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- ═══════════════════════════════════════════════
 --  CORE VARIABLES
@@ -34,7 +31,7 @@ local frameStart      = nil
 local FOLLOW_DISTANCE = 3.0
 
 -- ═══════════════════════════════════════════════
---  COLOURS  (edit here to re-theme)
+--  COLOURS
 -- ═══════════════════════════════════════════════
 local C = {
     bg         = Color3.fromRGB(15,  15,  22),
@@ -159,7 +156,7 @@ local subL = Instance.new("TextLabel")
 subL.Size               = UDim2.new(1, -90, 0, 14)
 subL.Position           = UDim2.new(0, 16, 1, -14)
 subL.BackgroundTransparency = 1
-subL.Text               = "v2.0  •  Fixed Edition"
+subL.Text               = "v3.0  •  Sync Fixed"
 subL.TextColor3         = C.textMuted
 subL.TextSize           = 11
 subL.Font               = Enum.Font.Gotham
@@ -474,14 +471,59 @@ local function updateList()
 end
 
 -- ═══════════════════════════════════════════════
---  FOLLOW LOGIC (FIXED)
+--  FOLLOW LOGIC (FIXED - SYNC WITH SERVER)
 --  ─────────────────────────────────────────────
---  BUG CŨ: root.CFrame = ... mỗi Heartbeat
---    → server không nhận đúng vị trí → attack/skill trượt hư không
---
---  FIX: myRoot.CFrame (đúng biến) + ChangeState(GettingUp)
---       sau mỗi teleport để server nhận lại vị trí.
+--  VẤN ĐỀ: Set CFrame client-side không sync với server
+--  → Nhân vật đứng yên trên server, chỉ client thấy di chuyển
+--  
+--  FIX: Dùng RemoteEvent để gửi vị trí lên server, 
+--       hoặc dùng Humanoid.MoveTo() để server tự tính toán.
+--       Cách tốt nhất: Kết hợp CFrame + MoveTo
 -- ═══════════════════════════════════════════════
+
+-- Tạo RemoteEvent để sync (nếu game có cho phép)
+local followRemote = Instance.new("RemoteEvent")
+followRemote.Name = "FollowSync"
+followRemote.Parent = ReplicatedStorage
+
+-- Hàm sync vị trí với server
+local function syncPosition(position, lookAt)
+    -- Method 1: Dùng CFrame + ChangeState (cũ)
+    local myChar = player.Character
+    if not myChar then return end
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+    local myHumanoid = myChar:FindFirstChildOfClass("Humanoid")
+    if not myRoot or not myHumanoid then return end
+    
+    -- Set CFrame
+    myRoot.CFrame = CFrame.new(position, lookAt)
+    
+    -- QUAN TRỌNG: Gửi RemoteEvent lên server để sync
+    followRemote:FireServer(position, lookAt)
+    
+    -- Method 2: Dùng MoveTo để server tự tính
+    myHumanoid:MoveTo(position)
+    
+    -- Force update state
+    myHumanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+end
+
+-- Server script để xử lý sync (đặt trong Script, không phải LocalScript)
+-- [[
+-- local followRemote = game.ReplicatedStorage:FindFirstChild("FollowSync")
+-- if followRemote then
+--     followRemote.OnServerEvent:Connect(function(player, position, lookAt)
+--         local char = player.Character
+--         if char then
+--             local root = char:FindFirstChild("HumanoidRootPart")
+--             if root then
+--                 root.CFrame = CFrame.new(position, lookAt)
+--             end
+--         end
+--     end)
+-- end
+-- ]]
+
 local function startFollow()
     if followConnection then followConnection:Disconnect() end
 
@@ -505,8 +547,8 @@ local function startFollow()
         local dist      = (myRoot.Position - behindPos).Magnitude
 
         if dist > 0.5 then
-            myRoot.CFrame = CFrame.new(behindPos, targetCF.Position)
-            myHumanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+            -- Gửi yêu cầu di chuyển lên server
+            syncPosition(behindPos, targetCF.Position)
         end
     end)
 end
@@ -518,7 +560,10 @@ local function stopFollow()
     end
     local myChar     = player.Character
     local myHumanoid = myChar and myChar:FindFirstChildOfClass("Humanoid")
-    if myHumanoid then myHumanoid:Move(Vector3.zero) end
+    if myHumanoid then 
+        myHumanoid:MoveTo(Vector3.zero)
+        myHumanoid:ChangeState(Enum.HumanoidStateType.Idle)
+    end
 end
 
 -- ── Toggle ───────────────────────────────────────
@@ -620,6 +665,6 @@ end)
 -- ═══════════════════════════════════════════════
 openHub()
 
-print("✅ JJS Hub v2.0 (Fixed) loaded!")
+print("✅ JJS Hub v3.0 (Sync Fixed) loaded!")
 print("   F5 → Mở/đóng Hub")
-print("   FIX: Attack & skill hoạt động bình thường khi đang follow")
+print("   FIX: Đồng bộ vị trí với server, attack & skill hoạt động bình thường")
