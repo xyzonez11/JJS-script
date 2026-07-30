@@ -1,670 +1,314 @@
 --[[
-    JJS Hub - Follow Player (FIXED - Teleport + Sync)
-    
-    FIX: Dùng RemoteEvent để đồng bộ vị trí với server
+    Script: JJS Hub - Follow Player (FIXED - Simple)
+    Description: A hub with GUI on the left side, toggle with F5.
 ]]
 
--- ═══════════════════════════════════════════════
---  SERVICES
--- ═══════════════════════════════════════════════
-local Players          = game:GetService("Players")
-local RunService       = game:GetService("RunService")
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local TweenService     = game:GetService("TweenService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- ═══════════════════════════════════════════════
---  CORE VARIABLES
--- ═══════════════════════════════════════════════
-local player    = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
+-- Variables
+local player = Players.LocalPlayer
+local character = player.Character
+local rootPart = character and character:FindFirstChild("HumanoidRootPart")
 
-local selectedPlayer  = nil
-local isFollowing     = false
+local selectedPlayer = nil
+local isFollowing = false
 local followConnection = nil
-local isHubOpen       = false
-local isDragging      = false
-local dragStart       = nil
-local frameStart      = nil
+local isHubOpen = false
 
--- Distance to maintain behind target (stud)
-local FOLLOW_DISTANCE = 3.0
+-- UI Elements
+local screenGui = nil
+local mainFrame = nil
+local featuresFrame = nil
+local playerDropdown = nil
+local toggleButton = nil
 
--- ═══════════════════════════════════════════════
---  COLOURS
--- ═══════════════════════════════════════════════
-local C = {
-    bg         = Color3.fromRGB(15,  15,  22),
-    panel      = Color3.fromRGB(22,  22,  35),
-    card       = Color3.fromRGB(28,  28,  44),
-    accent     = Color3.fromRGB( 99, 102, 241),
-    accentHov  = Color3.fromRGB(129, 132, 255),
-    danger     = Color3.fromRGB(239,  68,  68),
-    success    = Color3.fromRGB( 34, 197,  94),
-    warn       = Color3.fromRGB(234, 179,   8),
-    textPrim   = Color3.fromRGB(240, 240, 255),
-    textSec    = Color3.fromRGB(148, 148, 180),
-    textMuted  = Color3.fromRGB( 80,  80, 110),
-    border     = Color3.fromRGB( 45,  45,  70),
-    selectedBg = Color3.fromRGB( 55,  55, 120),
-    topbar     = Color3.fromRGB( 20,  20,  32),
-}
+-- Function to create the GUI
+local function createGUI()
+    -- Create ScreenGui
+    screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "JJS_Hub"
+    screenGui.Parent = player.PlayerGui
+    screenGui.Enabled = false -- Start closed
 
--- ═══════════════════════════════════════════════
---  HELPERS
--- ═══════════════════════════════════════════════
-local function tween(obj, props, t, style, dir)
-    style = style or Enum.EasingStyle.Quart
-    dir   = dir   or Enum.EasingDirection.Out
-    local ti = TweenInfo.new(t or 0.18, style, dir)
-    TweenService:Create(obj, ti, props):Play()
-end
+    -- Main Frame (Hub) - Left side
+    mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainFrame"
+    mainFrame.Size = UDim2.new(0, 250, 1, 0) -- Full height, 250 width
+    mainFrame.Position = UDim2.new(0, 0, 0, 0) -- Left side
+    mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+    mainFrame.BackgroundTransparency = 0.05
+    mainFrame.BorderSizePixel = 0
+    mainFrame.ClipsDescendants = true
+    mainFrame.Parent = screenGui
 
-local function corner(parent, radius)
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, radius or 8)
-    c.Parent = parent
-    return c
-end
+    -- Top bar (Title + Close button)
+    local topBar = Instance.new("Frame")
+    topBar.Name = "TopBar"
+    topBar.Size = UDim2.new(1, 0, 0, 45)
+    topBar.Position = UDim2.new(0, 0, 0, 0)
+    topBar.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+    topBar.BorderSizePixel = 0
+    topBar.Parent = mainFrame
 
-local function stroke(parent, color, thick)
-    local s = Instance.new("UIStroke")
-    s.Color = color or C.border
-    s.Thickness = thick or 1
-    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    s.Parent = parent
-    return s
-end
+    -- Title
+    local title = Instance.new("TextLabel")
+    title.Name = "Title"
+    title.Size = UDim2.new(1, -40, 1, 0)
+    title.Position = UDim2.new(0, 5, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "JJS HUB"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextSize = 20
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Font = Enum.Font.GothamBold
+    title.Parent = topBar
 
-local function label(parent, text, size, color, bold, ax, ay, sx, sy)
-    local l = Instance.new("TextLabel")
-    l.Text               = text
-    l.TextSize           = size  or 14
-    l.TextColor3         = color or C.textPrim
-    l.Font               = bold and Enum.Font.GothamBold or Enum.Font.Gotham
-    l.BackgroundTransparency = 1
-    l.TextXAlignment     = ax or Enum.TextXAlignment.Left
-    l.TextYAlignment     = ay or Enum.TextYAlignment.Center
-    l.Size               = UDim2.new(sx or 1, 0, sy or 1, 0)
-    l.Parent             = parent
-    return l
-end
+    -- Close Button (X)
+    local closeButton = Instance.new("TextButton")
+    closeButton.Name = "CloseButton"
+    closeButton.Size = UDim2.new(0, 35, 1, 0)
+    closeButton.Position = UDim2.new(1, -35, 0, 0)
+    closeButton.BackgroundTransparency = 1
+    closeButton.Text = "✕"
+    closeButton.TextColor3 = Color3.fromRGB(255, 100, 100)
+    closeButton.TextSize = 22
+    closeButton.Font = Enum.Font.GothamBold
+    closeButton.Parent = topBar
+    closeButton.MouseButton1Click:Connect(function()
+        isHubOpen = false
+        screenGui.Enabled = false
+    end)
 
--- ═══════════════════════════════════════════════
---  GUI  BUILD
--- ═══════════════════════════════════════════════
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name              = "JJS_Hub"
-screenGui.ZIndexBehavior    = Enum.ZIndexBehavior.Sibling
-screenGui.ResetOnSpawn      = false
-screenGui.Enabled           = false
-screenGui.Parent            = player.PlayerGui
+    -- Features Container (ScrollingFrame for future features)
+    featuresFrame = Instance.new("ScrollingFrame")
+    featuresFrame.Name = "FeaturesFrame"
+    featuresFrame.Size = UDim2.new(1, -20, 1, -55)
+    featuresFrame.Position = UDim2.new(0, 10, 0, 50)
+    featuresFrame.BackgroundTransparency = 1
+    featuresFrame.BorderSizePixel = 0
+    featuresFrame.ScrollBarThickness = 4
+    featuresFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    featuresFrame.Parent = mainFrame
 
--- ── Main frame ──────────────────────────────────
-local main = Instance.new("Frame")
-main.Name                 = "Main"
-main.Size                 = UDim2.new(0, 300, 0, 420)
-main.Position             = UDim2.new(0, 18, 0.5, -210)
-main.BackgroundColor3     = C.bg
-main.BackgroundTransparency = 0
-main.BorderSizePixel      = 0
-main.ClipsDescendants     = true
-main.Parent               = screenGui
-corner(main, 12)
-stroke(main, C.border, 1)
+    -- Feature 1: Follow Player
+    local feature1Frame = Instance.new("Frame")
+    feature1Frame.Name = "Feature1"
+    feature1Frame.Size = UDim2.new(1, 0, 0, 120)
+    feature1Frame.Position = UDim2.new(0, 0, 0, 0)
+    feature1Frame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    feature1Frame.BackgroundTransparency = 0.3
+    feature1Frame.BorderSizePixel = 0
+    feature1Frame.Parent = featuresFrame
 
--- ── Top bar ─────────────────────────────────────
-local topBar = Instance.new("Frame")
-topBar.Name           = "TopBar"
-topBar.Size           = UDim2.new(1, 0, 0, 46)
-topBar.BackgroundColor3 = C.topbar
-topBar.BorderSizePixel = 0
-topBar.ZIndex         = 2
-topBar.Parent         = main
-corner(topBar, 12)
+    -- Feature Title
+    local featureTitle = Instance.new("TextLabel")
+    featureTitle.Name = "FeatureTitle"
+    featureTitle.Size = UDim2.new(1, -10, 0, 25)
+    featureTitle.Position = UDim2.new(0, 5, 0, 5)
+    featureTitle.BackgroundTransparency = 1
+    featureTitle.Text = "📌 Follow Player"
+    featureTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    featureTitle.TextSize = 16
+    featureTitle.TextXAlignment = Enum.TextXAlignment.Left
+    featureTitle.Font = Enum.Font.GothamBold
+    featureTitle.Parent = feature1Frame
 
-local sq = Instance.new("Frame")
-sq.Size            = UDim2.new(1, 0, 0, 12)
-sq.Position        = UDim2.new(0, 0, 1, -12)
-sq.BackgroundColor3= C.topbar
-sq.BorderSizePixel = 0
-sq.ZIndex          = 2
-sq.Parent          = topBar
+    -- Player Dropdown Label
+    local dropdownLabel = Instance.new("TextLabel")
+    dropdownLabel.Name = "DropdownLabel"
+    dropdownLabel.Size = UDim2.new(0, 80, 0, 25)
+    dropdownLabel.Position = UDim2.new(0, 5, 0, 35)
+    dropdownLabel.BackgroundTransparency = 1
+    dropdownLabel.Text = "Player:"
+    dropdownLabel.TextColor3 = Color3.fromRGB(180, 180, 200)
+    dropdownLabel.TextSize = 14
+    dropdownLabel.TextXAlignment = Enum.TextXAlignment.Left
+    dropdownLabel.Font = Enum.Font.Gotham
+    dropdownLabel.Parent = feature1Frame
 
-local accentBar = Instance.new("Frame")
-accentBar.Size            = UDim2.new(0, 60, 0, 3)
-accentBar.Position        = UDim2.new(0, 16, 0, 0)
-accentBar.BackgroundColor3 = C.accent
-accentBar.BorderSizePixel  = 0
-accentBar.ZIndex           = 3
-accentBar.Parent           = topBar
-corner(accentBar, 2)
+    -- Player Dropdown (ScrollingFrame)
+    local dropdownFrame = Instance.new("ScrollingFrame")
+    dropdownFrame.Name = "DropdownFrame"
+    dropdownFrame.Size = UDim2.new(0, 140, 0, 45)
+    dropdownFrame.Position = UDim2.new(0, 90, 0, 35)
+    dropdownFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+    dropdownFrame.BorderSizePixel = 0
+    dropdownFrame.ScrollBarThickness = 4
+    dropdownFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    dropdownFrame.Parent = feature1Frame
 
-local titleL = Instance.new("TextLabel")
-titleL.Size               = UDim2.new(1, -90, 1, 0)
-titleL.Position           = UDim2.new(0, 16, 0, 0)
-titleL.BackgroundTransparency = 1
-titleL.Text               = "JJS  HUB"
-titleL.TextColor3         = C.textPrim
-titleL.TextSize           = 17
-titleL.Font               = Enum.Font.GothamBlack
-titleL.TextXAlignment     = Enum.TextXAlignment.Left
-titleL.ZIndex             = 3
-titleL.Parent             = topBar
-
-local subL = Instance.new("TextLabel")
-subL.Size               = UDim2.new(1, -90, 0, 14)
-subL.Position           = UDim2.new(0, 16, 1, -14)
-subL.BackgroundTransparency = 1
-subL.Text               = "v3.0  •  Sync Fixed"
-subL.TextColor3         = C.textMuted
-subL.TextSize           = 11
-subL.Font               = Enum.Font.Gotham
-subL.TextXAlignment     = Enum.TextXAlignment.Left
-subL.ZIndex             = 3
-subL.Parent             = topBar
-
-local closeBtn = Instance.new("TextButton")
-closeBtn.Size             = UDim2.new(0, 32, 0, 32)
-closeBtn.Position         = UDim2.new(1, -42, 0, 7)
-closeBtn.BackgroundColor3 = Color3.fromRGB(60, 30, 30)
-closeBtn.BorderSizePixel  = 0
-closeBtn.Text             = "✕"
-closeBtn.TextColor3       = C.danger
-closeBtn.TextSize         = 16
-closeBtn.Font             = Enum.Font.GothamBold
-closeBtn.ZIndex           = 4
-closeBtn.Parent           = topBar
-corner(closeBtn, 8)
-closeBtn.MouseEnter:Connect(function()
-    tween(closeBtn, {BackgroundColor3 = C.danger})
-    tween(closeBtn, {TextColor3 = Color3.fromRGB(255,255,255)})
-end)
-closeBtn.MouseLeave:Connect(function()
-    tween(closeBtn, {BackgroundColor3 = Color3.fromRGB(60,30,30)})
-    tween(closeBtn, {TextColor3 = C.danger})
-end)
-closeBtn.MouseButton1Click:Connect(function()
-    isHubOpen = false
-    tween(main, {Position = UDim2.new(0, -320, 0.5, -210)}, 0.25)
-    task.delay(0.25, function() screenGui.Enabled = false end)
-end)
-
--- ── Draggable ────────────────────────────────────
-topBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        isDragging = true
-        dragStart  = input.Position
-        frameStart = main.Position
-    end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if isDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = input.Position - dragStart
-        main.Position = UDim2.new(
-            frameStart.X.Scale,
-            frameStart.X.Offset + delta.X,
-            frameStart.Y.Scale,
-            frameStart.Y.Offset + delta.Y
-        )
-    end
-end)
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        isDragging = false
-    end
-end)
-
--- ── Content area ────────────────────────────────
-local content = Instance.new("Frame")
-content.Size            = UDim2.new(1, -24, 1, -58)
-content.Position        = UDim2.new(0, 12, 0, 52)
-content.BackgroundTransparency = 1
-content.Parent          = main
-
--- ── Section: Target ─────────────────────────────
-local secTarget = Instance.new("Frame")
-secTarget.Size          = UDim2.new(1, 0, 0, 28)
-secTarget.Position      = UDim2.new(0, 0, 0, 0)
-secTarget.BackgroundTransparency = 1
-secTarget.Parent        = content
-label(secTarget, "SELECT TARGET", 11, C.textMuted, true)
-
-local listBg = Instance.new("Frame")
-listBg.Size             = UDim2.new(1, 0, 0, 160)
-listBg.Position         = UDim2.new(0, 0, 0, 30)
-listBg.BackgroundColor3 = C.panel
-listBg.BorderSizePixel  = 0
-listBg.ClipsDescendants = true
-listBg.Parent           = content
-corner(listBg, 8)
-stroke(listBg, C.border, 1)
-
-local scroll = Instance.new("ScrollingFrame")
-scroll.Size             = UDim2.new(1, -4, 1, -8)
-scroll.Position         = UDim2.new(0, 2, 0, 4)
-scroll.BackgroundTransparency = 1
-scroll.BorderSizePixel  = 0
-scroll.ScrollBarThickness = 3
-scroll.ScrollBarImageColor3 = C.accent
-scroll.CanvasSize       = UDim2.new(0, 0, 0, 0)
-scroll.Parent           = listBg
-
-local listLayout = Instance.new("UIListLayout")
-listLayout.Padding      = UDim.new(0, 4)
-listLayout.Parent       = scroll
-
-local listPad = Instance.new("UIPadding")
-listPad.PaddingLeft     = UDim.new(0, 4)
-listPad.PaddingRight    = UDim.new(0, 4)
-listPad.PaddingTop      = UDim.new(0, 2)
-listPad.Parent          = scroll
-
--- ── Section: Status ──────────────────────────────
-local statusCard = Instance.new("Frame")
-statusCard.Size           = UDim2.new(1, 0, 0, 46)
-statusCard.Position       = UDim2.new(0, 0, 0, 200)
-statusCard.BackgroundColor3 = C.card
-statusCard.BorderSizePixel  = 0
-statusCard.Parent           = content
-corner(statusCard, 8)
-stroke(statusCard, C.border, 1)
-
-local statusDot = Instance.new("Frame")
-statusDot.Size            = UDim2.new(0, 10, 0, 10)
-statusDot.Position        = UDim2.new(0, 14, 0.5, -5)
-statusDot.BackgroundColor3 = C.textMuted
-statusDot.BorderSizePixel  = 0
-statusDot.Parent           = statusCard
-corner(statusDot, 999)
-
-local statusText = Instance.new("TextLabel")
-statusText.Size             = UDim2.new(1, -40, 1, 0)
-statusText.Position         = UDim2.new(0, 32, 0, 0)
-statusText.BackgroundTransparency = 1
-statusText.Text             = "Idle — chọn mục tiêu trước"
-statusText.TextColor3       = C.textSec
-statusText.TextSize         = 13
-statusText.Font             = Enum.Font.Gotham
-statusText.TextXAlignment   = Enum.TextXAlignment.Left
-statusText.Parent           = statusCard
-
--- ── Section: Follow Distance ─────────────────────
-local distCard = Instance.new("Frame")
-distCard.Size           = UDim2.new(1, 0, 0, 70)
-distCard.Position       = UDim2.new(0, 0, 0, 256)
-distCard.BackgroundColor3 = C.card
-distCard.BorderSizePixel  = 0
-distCard.Parent           = content
-corner(distCard, 8)
-stroke(distCard, C.border, 1)
-
-local distLabel = label(distCard, "KHOẢNG CÁCH FOLLOW", 11, C.textMuted, true)
-distLabel.Size     = UDim2.new(1, -80, 0, 20)
-distLabel.Position = UDim2.new(0, 12, 0, 8)
-
-local distValueL = Instance.new("TextLabel")
-distValueL.Size             = UDim2.new(0, 70, 0, 20)
-distValueL.Position         = UDim2.new(1, -82, 0, 8)
-distValueL.BackgroundTransparency = 1
-distValueL.Text             = FOLLOW_DISTANCE .. " studs"
-distValueL.TextColor3       = C.accent
-distValueL.TextSize         = 13
-distValueL.Font             = Enum.Font.GothamBold
-distValueL.TextXAlignment   = Enum.TextXAlignment.Right
-distValueL.Parent           = distCard
-
-local sliderBg = Instance.new("Frame")
-sliderBg.Size           = UDim2.new(1, -24, 0, 6)
-sliderBg.Position       = UDim2.new(0, 12, 0, 38)
-sliderBg.BackgroundColor3 = C.border
-sliderBg.BorderSizePixel  = 0
-sliderBg.Parent           = distCard
-corner(sliderBg, 4)
-
-local sliderFill = Instance.new("Frame")
-sliderFill.Size           = UDim2.new(FOLLOW_DISTANCE / 10, 0, 1, 0)
-sliderFill.BackgroundColor3 = C.accent
-sliderFill.BorderSizePixel  = 0
-sliderFill.Parent           = sliderBg
-corner(sliderFill, 4)
-
-local sliderKnob = Instance.new("TextButton")
-sliderKnob.Size           = UDim2.new(0, 16, 0, 16)
-sliderKnob.AnchorPoint    = Vector2.new(0.5, 0.5)
-sliderKnob.Position       = UDim2.new(FOLLOW_DISTANCE / 10, 0, 0.5, 0)
-sliderKnob.BackgroundColor3 = C.accent
-sliderKnob.BorderSizePixel  = 0
-sliderKnob.Text             = ""
-sliderKnob.ZIndex           = 3
-sliderKnob.Parent           = sliderBg
-corner(sliderKnob, 999)
-stroke(sliderKnob, Color3.fromRGB(180,180,255), 1.5)
-
-local sliderDragging = false
-sliderKnob.InputBegan:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.MouseButton1 then sliderDragging = true end
-end)
-UserInputService.InputEnded:Connect(function(i)
-    if i.UserInputType == Enum.UserInputType.MouseButton1 then sliderDragging = false end
-end)
-UserInputService.InputChanged:Connect(function(i)
-    if sliderDragging and i.UserInputType == Enum.UserInputType.MouseMovement then
-        local abs  = sliderBg.AbsolutePosition
-        local siz  = sliderBg.AbsoluteSize
-        local relX = math.clamp((i.Position.X - abs.X) / siz.X, 0, 1)
-        FOLLOW_DISTANCE = math.floor(relX * 9 + 1 + 0.5)
-        local pct = (FOLLOW_DISTANCE - 1) / 9
-        sliderFill.Size     = UDim2.new(pct, 0, 1, 0)
-        sliderKnob.Position = UDim2.new(pct, 0, 0.5, 0)
-        distValueL.Text     = FOLLOW_DISTANCE .. " studs"
-    end
-end)
-
--- ── Big toggle button ────────────────────────────
-local toggleBtn = Instance.new("TextButton")
-toggleBtn.Size            = UDim2.new(1, 0, 0, 44)
-toggleBtn.Position        = UDim2.new(0, 0, 0, 336)
-toggleBtn.BackgroundColor3 = C.accent
-toggleBtn.BorderSizePixel  = 0
-toggleBtn.Text             = "▶  BẮT ĐẦU FOLLOW"
-toggleBtn.TextColor3       = Color3.fromRGB(255, 255, 255)
-toggleBtn.TextSize         = 15
-toggleBtn.Font             = Enum.Font.GothamBlack
-toggleBtn.Parent           = content
-corner(toggleBtn, 10)
-
-toggleBtn.MouseEnter:Connect(function()
-    if not isFollowing then tween(toggleBtn, {BackgroundColor3 = C.accentHov}) end
-end)
-toggleBtn.MouseLeave:Connect(function()
-    if not isFollowing then tween(toggleBtn, {BackgroundColor3 = C.accent}) end
-end)
-
-local hint = label(content, "F5 để mở / đóng Hub", 11, C.textMuted)
-hint.Size     = UDim2.new(1, 0, 0, 18)
-hint.Position = UDim2.new(0, 0, 0, 384)
-hint.TextXAlignment = Enum.TextXAlignment.Center
-
--- ═══════════════════════════════════════════════
---  STATUS HELPERS
--- ═══════════════════════════════════════════════
-local function setStatus(text, color, dotColor)
-    statusText.Text      = text
-    statusText.TextColor3 = color  or C.textSec
-    tween(statusDot, {BackgroundColor3 = dotColor or C.textMuted})
-end
-
--- ═══════════════════════════════════════════════
---  PLAYER LIST
--- ═══════════════════════════════════════════════
-local function updateList()
-    for _, child in scroll:GetChildren() do
-        if child:IsA("TextButton") then child:Destroy() end
-    end
-
-    local plrs  = Players:GetPlayers()
-    local count = 0
-
-    for _, plr in ipairs(plrs) do
-        if plr ~= player then
-            count = count + 1
-            local row = Instance.new("TextButton")
-            row.Name              = plr.Name
-            row.Size              = UDim2.new(1, 0, 0, 32)
-            row.BackgroundColor3  = (selectedPlayer == plr) and C.selectedBg or C.card
-            row.BorderSizePixel   = 0
-            row.Text              = ""
-            row.AutoButtonColor   = false
-            row.Parent            = scroll
-            corner(row, 6)
-            if selectedPlayer ~= plr then stroke(row, C.border, 1) end
-
-            local thumb = Instance.new("ImageLabel")
-            thumb.Size              = UDim2.new(0, 24, 0, 24)
-            thumb.Position          = UDim2.new(0, 6, 0.5, -12)
-            thumb.BackgroundColor3  = C.panel
-            thumb.BorderSizePixel   = 0
-            thumb.Image             = "rbxthumb://type=AvatarHeadShot&id=" .. plr.UserId .. "&w=48&h=48"
-            thumb.Parent            = row
-            corner(thumb, 4)
-
-            local nameL = label(row, plr.Name, 13, (selectedPlayer == plr) and C.textPrim or C.textSec, true)
-            nameL.Size     = UDim2.new(1, -70, 1, 0)
-            nameL.Position = UDim2.new(0, 36, 0, 0)
-
-            local dispL = label(row, "@" .. plr.DisplayName, 11, C.textMuted)
-            dispL.Size     = UDim2.new(1, -70, 0, 14)
-            dispL.Position = UDim2.new(0, 36, 1, -14)
-
-            if selectedPlayer == plr then
-                local dot = Instance.new("Frame")
-                dot.Size            = UDim2.new(0, 6, 0, 6)
-                dot.Position        = UDim2.new(1, -14, 0.5, -3)
-                dot.BackgroundColor3 = C.success
-                dot.BorderSizePixel  = 0
-                dot.Parent           = row
-                corner(dot, 999)
+    -- Populate dropdown with players
+    local function updateDropdown()
+        -- Clear existing buttons
+        for _, child in ipairs(dropdownFrame:GetChildren()) do
+            if child:IsA("TextButton") then
+                child:Destroy()
             end
-
-            row.MouseEnter:Connect(function()
-                if selectedPlayer ~= plr then tween(row, {BackgroundColor3 = C.border}) end
-            end)
-            row.MouseLeave:Connect(function()
-                if selectedPlayer ~= plr then tween(row, {BackgroundColor3 = C.card}) end
-            end)
-            row.MouseButton1Click:Connect(function()
-                selectedPlayer = plr
-                updateList()
-                setStatus("Đã chọn: " .. plr.Name, C.success, C.success)
-            end)
         end
+
+        local players = Players:GetPlayers()
+        local yOffset = 0
+        for _, plr in ipairs(players) do
+            if plr ~= player then
+                local btn = Instance.new("TextButton")
+                btn.Name = plr.Name
+                btn.Size = UDim2.new(1, 0, 0, 22)
+                btn.Position = UDim2.new(0, 0, 0, yOffset)
+                btn.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+                btn.BorderSizePixel = 0
+                btn.Text = plr.Name
+                btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                btn.TextSize = 12
+                btn.Font = Enum.Font.Gotham
+                btn.Parent = dropdownFrame
+
+                btn.MouseButton1Click:Connect(function()
+                    selectedPlayer = plr
+                    -- Highlight selected
+                    for _, child in ipairs(dropdownFrame:GetChildren()) do
+                        if child:IsA("TextButton") then
+                            child.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+                        end
+                    end
+                    btn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+                end)
+
+                yOffset = yOffset + 25
+            end
+        end
+        dropdownFrame.CanvasSize = UDim2.new(0, 0, 0, yOffset + 5)
     end
 
-    if count == 0 then
-        local noPlr = label(scroll, "Không có người chơi nào khác", 13, C.textMuted)
-        noPlr.Size           = UDim2.new(1, 0, 0, 40)
-        noPlr.TextXAlignment = Enum.TextXAlignment.Center
-    end
+    updateDropdown()
 
-    scroll.CanvasSize = UDim2.new(0, 0, 0, count * 36 + 8)
-end
+    -- Toggle Button (On/Off)
+    toggleButton = Instance.new("TextButton")
+    toggleButton.Name = "ToggleButton"
+    toggleButton.Size = UDim2.new(0, 60, 0, 30)
+    toggleButton.Position = UDim2.new(0, 5, 0, 85)
+    toggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+    toggleButton.BorderSizePixel = 0
+    toggleButton.Text = "OFF"
+    toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleButton.TextSize = 14
+    toggleButton.Font = Enum.Font.GothamBold
+    toggleButton.Parent = feature1Frame
 
--- ═══════════════════════════════════════════════
---  FOLLOW LOGIC (FIXED - SYNC WITH SERVER)
---  ─────────────────────────────────────────────
---  VẤN ĐỀ: Set CFrame client-side không sync với server
---  → Nhân vật đứng yên trên server, chỉ client thấy di chuyển
---  
---  FIX: Dùng RemoteEvent để gửi vị trí lên server, 
---       hoặc dùng Humanoid.MoveTo() để server tự tính toán.
---       Cách tốt nhất: Kết hợp CFrame + MoveTo
--- ═══════════════════════════════════════════════
-
--- Tạo RemoteEvent để sync (nếu game có cho phép)
-local followRemote = Instance.new("RemoteEvent")
-followRemote.Name = "FollowSync"
-followRemote.Parent = ReplicatedStorage
-
--- Hàm sync vị trí với server
-local function syncPosition(position, lookAt)
-    -- Method 1: Dùng CFrame + ChangeState (cũ)
-    local myChar = player.Character
-    if not myChar then return end
-    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
-    local myHumanoid = myChar:FindFirstChildOfClass("Humanoid")
-    if not myRoot or not myHumanoid then return end
-    
-    -- Set CFrame
-    myRoot.CFrame = CFrame.new(position, lookAt)
-    
-    -- QUAN TRỌNG: Gửi RemoteEvent lên server để sync
-    followRemote:FireServer(position, lookAt)
-    
-    -- Method 2: Dùng MoveTo để server tự tính
-    myHumanoid:MoveTo(position)
-    
-    -- Force update state
-    myHumanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-end
-
--- Server script để xử lý sync (đặt trong Script, không phải LocalScript)
--- [[
--- local followRemote = game.ReplicatedStorage:FindFirstChild("FollowSync")
--- if followRemote then
---     followRemote.OnServerEvent:Connect(function(player, position, lookAt)
---         local char = player.Character
---         if char then
---             local root = char:FindFirstChild("HumanoidRootPart")
---             if root then
---                 root.CFrame = CFrame.new(position, lookAt)
---             end
---         end
---     end)
--- end
--- ]]
-
-local function startFollow()
-    if followConnection then followConnection:Disconnect() end
-
-    followConnection = RunService.Heartbeat:Connect(function()
-        if not isFollowing then return end
-
-        local myChar = player.Character
-        if not myChar then return end
-        local myRoot     = myChar:FindFirstChild("HumanoidRootPart")
-        local myHumanoid = myChar:FindFirstChildOfClass("Humanoid")
-        if not myRoot or not myHumanoid then return end
-        if myHumanoid.Health <= 0 then return end
-
-        local targetChar = selectedPlayer and selectedPlayer.Character
-        if not targetChar then return end
-        local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
-        if not targetRoot then return end
-
-        local targetCF  = targetRoot.CFrame
-        local behindPos = targetCF.Position - (targetCF.LookVector * FOLLOW_DISTANCE)
-        local dist      = (myRoot.Position - behindPos).Magnitude
-
-        if dist > 0.5 then
-            -- Gửi yêu cầu di chuyển lên server
-            syncPosition(behindPos, targetCF.Position)
+    toggleButton.MouseButton1Click:Connect(function()
+        if isFollowing then
+            -- Turn off
+            isFollowing = false
+            toggleButton.Text = "OFF"
+            toggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+            if followConnection then
+                followConnection:Disconnect()
+                followConnection = nil
+            end
+        else
+            -- Turn on
+            if selectedPlayer then
+                isFollowing = true
+                toggleButton.Text = "ON"
+                toggleButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+                -- Start following
+                if followConnection then
+                    followConnection:Disconnect()
+                end
+                followConnection = RunService.Heartbeat:Connect(function()
+                    if not isFollowing then return end
+                    
+                    local targetChar = selectedPlayer.Character
+                    if targetChar and targetChar:FindFirstChild("HumanoidRootPart") then
+                        local targetRoot = targetChar.HumanoidRootPart
+                        local character = player.Character
+                        if character and character:FindFirstChild("HumanoidRootPart") then
+                            local root = character.HumanoidRootPart
+                            local humanoid = character:FindFirstChildOfClass("Humanoid")
+                            
+                            local targetCFrame = targetRoot.CFrame
+                            -- Khoảng cách 2.5 để đánh được
+                            local behindPosition = targetCFrame.Position - (targetCFrame.LookVector * 2.5) + Vector3.new(0, 1.5, 0)
+                            
+                            -- Set CFrame
+                            root.CFrame = CFrame.new(behindPosition, targetCFrame.Position)
+                            
+                            -- QUAN TRỌNG: Force sync với server
+                            if humanoid then
+                                humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+                                -- Hoặc dùng Jump để force update
+                                -- humanoid.Jump = true
+                            end
+                        end
+                    end
+                end)
+            else
+                -- No player selected
+                toggleButton.Text = "No Player!"
+                toggleButton.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
+                task.wait(1)
+                toggleButton.Text = "OFF"
+                toggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+            end
         end
     end)
+
+    -- Update dropdown when players join/leave
+    Players.PlayerAdded:Connect(updateDropdown)
+    Players.PlayerRemoving:Connect(updateDropdown)
+
+    -- Update canvas size for features frame
+    featuresFrame.CanvasSize = UDim2.new(0, 0, 0, 130) -- Add more height for future features
+
+    return screenGui
 end
 
-local function stopFollow()
+-- Toggle hub with F5
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.F5 then
+        if screenGui then
+            isHubOpen = not isHubOpen
+            screenGui.Enabled = isHubOpen
+        else
+            createGUI()
+            isHubOpen = true
+            screenGui.Enabled = true
+        end
+    end
+end)
+
+-- Create GUI initially but keep it closed
+createGUI()
+
+-- Print instructions
+print("JJS Hub loaded!")
+print("Press F5 to open/close the hub.")
+print("Select a player from the dropdown, then click the toggle button to fly behind them.")
+
+-- Cleanup function
+local function cleanup()
     if followConnection then
         followConnection:Disconnect()
         followConnection = nil
     end
-    local myChar     = player.Character
-    local myHumanoid = myChar and myChar:FindFirstChildOfClass("Humanoid")
-    if myHumanoid then 
-        myHumanoid:MoveTo(Vector3.zero)
-        myHumanoid:ChangeState(Enum.HumanoidStateType.Idle)
+    if screenGui then
+        screenGui:Destroy()
+        screenGui = nil
     end
 end
 
--- ── Toggle ───────────────────────────────────────
-local function toggleFollow()
-    if isFollowing then
-        isFollowing = false
-        stopFollow()
-        tween(toggleBtn, {BackgroundColor3 = C.accent})
-        toggleBtn.Text = "▶  BẮT ĐẦU FOLLOW"
-        setStatus("Đã dừng follow", C.textSec, C.textMuted)
-    else
-        if not selectedPlayer then
-            tween(toggleBtn, {BackgroundColor3 = C.warn})
-            toggleBtn.Text = "⚠  CHỌN MỤC TIÊU TRƯỚC"
-            setStatus("Chưa chọn mục tiêu!", C.warn, C.warn)
-            task.delay(1.8, function()
-                if not isFollowing then
-                    tween(toggleBtn, {BackgroundColor3 = C.accent})
-                    toggleBtn.Text = "▶  BẮT ĐẦU FOLLOW"
-                    setStatus("Idle — chọn mục tiêu trước", C.textSec, C.textMuted)
-                end
-            end)
-            return
-        end
-        isFollowing = true
-        startFollow()
-        tween(toggleBtn, {BackgroundColor3 = C.danger})
-        toggleBtn.Text = "⏹  DỪNG FOLLOW"
-        setStatus("Đang follow: " .. selectedPlayer.Name, C.danger, C.danger)
-    end
-end
-
-toggleBtn.MouseButton1Click:Connect(toggleFollow)
-
--- ═══════════════════════════════════════════════
---  HUB OPEN / CLOSE
--- ═══════════════════════════════════════════════
-local function openHub()
-    screenGui.Enabled = true
-    isHubOpen = true
-    updateList()
-    main.Position = UDim2.new(0, -320, 0.5, -210)
-    tween(main, {Position = UDim2.new(0, 18, 0.5, -210)}, 0.28, Enum.EasingStyle.Back)
-end
-
-local function closeHub()
-    isHubOpen = false
-    tween(main, {Position = UDim2.new(0, -320, 0.5, -210)}, 0.22)
-    task.delay(0.23, function() screenGui.Enabled = false end)
-end
-
--- ═══════════════════════════════════════════════
---  HOTKEYS
--- ═══════════════════════════════════════════════
-UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.KeyCode == Enum.KeyCode.F5 then
-        if isHubOpen then closeHub() else openHub() end
-    end
-end)
-
--- ═══════════════════════════════════════════════
---  AUTO-UPDATE LIST
--- ═══════════════════════════════════════════════
-Players.PlayerAdded:Connect(function()
-    if isHubOpen then updateList() end
-end)
-
-Players.PlayerRemoving:Connect(function(plr)
-    if selectedPlayer == plr then
-        selectedPlayer = nil
-        if isFollowing then
-            isFollowing = false
-            stopFollow()
-            tween(toggleBtn, {BackgroundColor3 = C.accent})
-            toggleBtn.Text = "▶  BẮT ĐẦU FOLLOW"
-        end
-        setStatus("⚠ Mục tiêu đã rời game", C.warn, C.warn)
-    end
-    if isHubOpen then updateList() end
-end)
-
--- ═══════════════════════════════════════════════
---  CHARACTER RESPAWN
--- ═══════════════════════════════════════════════
+-- Handle player respawn
 player.CharacterAdded:Connect(function(newChar)
     character = newChar
-    if isFollowing then
-        isFollowing = false
-        stopFollow()
-        tween(toggleBtn, {BackgroundColor3 = C.accent})
-        toggleBtn.Text = "▶  BẮT ĐẦU FOLLOW"
-        setStatus("Đã hồi sinh — follow đã dừng", C.textSec, C.textMuted)
-    end
+    rootPart = character and character:FindFirstChild("HumanoidRootPart")
 end)
 
--- ═══════════════════════════════════════════════
---  INIT
--- ═══════════════════════════════════════════════
-openHub()
-
-print("✅ JJS Hub v3.0 (Sync Fixed) loaded!")
-print("   F5 → Mở/đóng Hub")
-print("   FIX: Đồng bộ vị trí với server, attack & skill hoạt động bình thường")
+-- If character is nil, wait for it
+if not character then
+    player.CharacterAdded:Wait()
+    character = player.Character
+    rootPart = character and character:FindFirstChild("HumanoidRootPart")
+end
