@@ -22,8 +22,8 @@ local isHubOpen = false
 local screenGui = nil
 local mainFrame = nil
 local featuresFrame = nil
-local playerDropdown = nil
 local toggleButton = nil
+local statusLabel = nil
 
 -- Function to create the GUI
 local function createGUI()
@@ -31,50 +31,59 @@ local function createGUI()
     screenGui = Instance.new("ScreenGui")
     screenGui.Name = "JJS_Hub"
     screenGui.Parent = player.PlayerGui
-    screenGui.Enabled = false -- Start closed
+    screenGui.Enabled = false
 
-    -- Main Frame (Hub) - Left side
+    -- Main Frame
     mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(0, 250, 1, 0) -- Full height, 250 width
-    mainFrame.Position = UDim2.new(0, 0, 0, 0) -- Left side
-    mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    mainFrame.BackgroundTransparency = 0.05
+    mainFrame.Size = UDim2.new(0, 280, 0, 400)
+    mainFrame.Position = UDim2.new(0, 10, 0.5, -200)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+    mainFrame.BackgroundTransparency = 0.1
     mainFrame.BorderSizePixel = 0
     mainFrame.ClipsDescendants = true
     mainFrame.Parent = screenGui
+    
+    -- Add corner radius
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = mainFrame
 
-    -- Top bar (Title + Close button)
+    -- Top bar
     local topBar = Instance.new("Frame")
     topBar.Name = "TopBar"
-    topBar.Size = UDim2.new(1, 0, 0, 45)
+    topBar.Size = UDim2.new(1, 0, 0, 40)
     topBar.Position = UDim2.new(0, 0, 0, 0)
-    topBar.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+    topBar.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
     topBar.BorderSizePixel = 0
     topBar.Parent = mainFrame
+    
+    local topCorner = Instance.new("UICorner")
+    topCorner.CornerRadius = UDim.new(0, 8)
+    topCorner.Parent = topBar
 
     -- Title
     local title = Instance.new("TextLabel")
     title.Name = "Title"
     title.Size = UDim2.new(1, -40, 1, 0)
-    title.Position = UDim2.new(0, 5, 0, 0)
+    title.Position = UDim2.new(0, 10, 0, 0)
     title.BackgroundTransparency = 1
-    title.Text = "JJS HUB"
+    title.Text = "✨ JJS HUB"
     title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.TextSize = 20
+    title.TextSize = 18
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.Font = Enum.Font.GothamBold
     title.Parent = topBar
 
-    -- Close Button (X)
+    -- Close Button
     local closeButton = Instance.new("TextButton")
     closeButton.Name = "CloseButton"
     closeButton.Size = UDim2.new(0, 35, 1, 0)
     closeButton.Position = UDim2.new(1, -35, 0, 0)
     closeButton.BackgroundTransparency = 1
     closeButton.Text = "✕"
-    closeButton.TextColor3 = Color3.fromRGB(255, 100, 100)
-    closeButton.TextSize = 22
+    closeButton.TextColor3 = Color3.fromRGB(255, 80, 80)
+    closeButton.TextSize = 20
     closeButton.Font = Enum.Font.GothamBold
     closeButton.Parent = topBar
     closeButton.MouseButton1Click:Connect(function()
@@ -82,67 +91,87 @@ local function createGUI()
         screenGui.Enabled = false
     end)
 
-    -- Features Container (ScrollingFrame for future features)
+    -- Features Container
     featuresFrame = Instance.new("ScrollingFrame")
     featuresFrame.Name = "FeaturesFrame"
-    featuresFrame.Size = UDim2.new(1, -20, 1, -55)
-    featuresFrame.Position = UDim2.new(0, 10, 0, 50)
+    featuresFrame.Size = UDim2.new(1, -20, 1, -50)
+    featuresFrame.Position = UDim2.new(0, 10, 0, 45)
     featuresFrame.BackgroundTransparency = 1
     featuresFrame.BorderSizePixel = 0
     featuresFrame.ScrollBarThickness = 4
     featuresFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
     featuresFrame.Parent = mainFrame
 
-    -- Feature 1: Follow Player
-    local feature1Frame = Instance.new("Frame")
-    feature1Frame.Name = "Feature1"
-    feature1Frame.Size = UDim2.new(1, 0, 0, 120)
-    feature1Frame.Position = UDim2.new(0, 0, 0, 0)
-    feature1Frame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-    feature1Frame.BackgroundTransparency = 0.3
-    feature1Frame.BorderSizePixel = 0
-    feature1Frame.Parent = featuresFrame
+    -- Feature: Follow Player
+    local featureFrame = Instance.new("Frame")
+    featureFrame.Name = "FollowFeature"
+    featureFrame.Size = UDim2.new(1, 0, 0, 180)
+    featureFrame.Position = UDim2.new(0, 0, 0, 0)
+    featureFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+    featureFrame.BackgroundTransparency = 0.3
+    featureFrame.BorderSizePixel = 0
+    featureFrame.Parent = featuresFrame
+    
+    local featureCorner = Instance.new("UICorner")
+    featureCorner.CornerRadius = UDim.new(0, 6)
+    featureCorner.Parent = featureFrame
 
     -- Feature Title
     local featureTitle = Instance.new("TextLabel")
     featureTitle.Name = "FeatureTitle"
-    featureTitle.Size = UDim2.new(1, -10, 0, 25)
+    featureTitle.Size = UDim2.new(1, -10, 0, 30)
     featureTitle.Position = UDim2.new(0, 5, 0, 5)
     featureTitle.BackgroundTransparency = 1
-    featureTitle.Text = "📌 Follow Player"
+    featureTitle.Text = "🎯 Follow Player"
     featureTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
     featureTitle.TextSize = 16
     featureTitle.TextXAlignment = Enum.TextXAlignment.Left
     featureTitle.Font = Enum.Font.GothamBold
-    featureTitle.Parent = feature1Frame
+    featureTitle.Parent = featureFrame
+
+    -- Status Label
+    statusLabel = Instance.new("TextLabel")
+    statusLabel.Name = "StatusLabel"
+    statusLabel.Size = UDim2.new(1, -10, 0, 20)
+    statusLabel.Position = UDim2.new(0, 5, 0, 35)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Text = "Status: ⚪ Idle"
+    statusLabel.TextColor3 = Color3.fromRGB(180, 180, 200)
+    statusLabel.TextSize = 13
+    statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+    statusLabel.Font = Enum.Font.Gotham
+    statusLabel.Parent = featureFrame
 
     -- Player Dropdown Label
     local dropdownLabel = Instance.new("TextLabel")
     dropdownLabel.Name = "DropdownLabel"
-    dropdownLabel.Size = UDim2.new(0, 80, 0, 25)
-    dropdownLabel.Position = UDim2.new(0, 5, 0, 35)
+    dropdownLabel.Size = UDim2.new(0, 60, 0, 25)
+    dropdownLabel.Position = UDim2.new(0, 5, 0, 60)
     dropdownLabel.BackgroundTransparency = 1
     dropdownLabel.Text = "Player:"
-    dropdownLabel.TextColor3 = Color3.fromRGB(180, 180, 200)
+    dropdownLabel.TextColor3 = Color3.fromRGB(200, 200, 220)
     dropdownLabel.TextSize = 14
     dropdownLabel.TextXAlignment = Enum.TextXAlignment.Left
-    dropdownLabel.Font = Enum.Font.Gotham
-    dropdownLabel.Parent = feature1Frame
+    dropdownLabel.Font = Enum.Font.GothamBold
+    dropdownLabel.Parent = featureFrame
 
-    -- Player Dropdown (ScrollingFrame)
+    -- Player Dropdown
     local dropdownFrame = Instance.new("ScrollingFrame")
     dropdownFrame.Name = "DropdownFrame"
-    dropdownFrame.Size = UDim2.new(0, 140, 0, 45)
-    dropdownFrame.Position = UDim2.new(0, 90, 0, 35)
-    dropdownFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+    dropdownFrame.Size = UDim2.new(0, 170, 0, 50)
+    dropdownFrame.Position = UDim2.new(0, 65, 0, 60)
+    dropdownFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 40)
     dropdownFrame.BorderSizePixel = 0
-    dropdownFrame.ScrollBarThickness = 4
+    dropdownFrame.ScrollBarThickness = 3
     dropdownFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-    dropdownFrame.Parent = feature1Frame
+    dropdownFrame.Parent = featureFrame
+    
+    local dropdownCorner = Instance.new("UICorner")
+    dropdownCorner.CornerRadius = UDim.new(0, 4)
+    dropdownCorner.Parent = dropdownFrame
 
-    -- Populate dropdown with players
+    -- Populate dropdown
     local function updateDropdown()
-        -- Clear existing buttons
         for _, child in ipairs(dropdownFrame:GetChildren()) do
             if child:IsA("TextButton") then
                 child:Destroy()
@@ -151,73 +180,104 @@ local function createGUI()
 
         local players = Players:GetPlayers()
         local yOffset = 0
+        local hasPlayers = false
+        
         for _, plr in ipairs(players) do
             if plr ~= player then
+                hasPlayers = true
                 local btn = Instance.new("TextButton")
                 btn.Name = plr.Name
-                btn.Size = UDim2.new(1, 0, 0, 22)
+                btn.Size = UDim2.new(1, 0, 0, 25)
                 btn.Position = UDim2.new(0, 0, 0, yOffset)
-                btn.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+                btn.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
                 btn.BorderSizePixel = 0
-                btn.Text = plr.Name
-                btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                btn.Text = "👤 " .. plr.Name
+                btn.TextColor3 = Color3.fromRGB(220, 220, 240)
                 btn.TextSize = 12
+                btn.TextXAlignment = Enum.TextXAlignment.Left
                 btn.Font = Enum.Font.Gotham
                 btn.Parent = dropdownFrame
+                
+                local btnCorner = Instance.new("UICorner")
+                btnCorner.CornerRadius = UDim.new(0, 3)
+                btnCorner.Parent = btn
 
                 btn.MouseButton1Click:Connect(function()
                     selectedPlayer = plr
-                    -- Highlight selected
                     for _, child in ipairs(dropdownFrame:GetChildren()) do
                         if child:IsA("TextButton") then
-                            child.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+                            child.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+                            child.TextColor3 = Color3.fromRGB(220, 220, 240)
                         end
                     end
                     btn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+                    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    statusLabel.Text = "Status: ✅ Selected " .. plr.Name
+                    statusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
                 end)
 
-                yOffset = yOffset + 25
+                yOffset = yOffset + 28
             end
         end
+        
+        if not hasPlayers then
+            local noPlayerLabel = Instance.new("TextLabel")
+            noPlayerLabel.Size = UDim2.new(1, 0, 1, 0)
+            noPlayerLabel.BackgroundTransparency = 1
+            noPlayerLabel.Text = "No other players"
+            noPlayerLabel.TextColor3 = Color3.fromRGB(150, 150, 170)
+            noPlayerLabel.TextSize = 12
+            noPlayerLabel.Font = Enum.Font.Gotham
+            noPlayerLabel.Parent = dropdownFrame
+        end
+        
         dropdownFrame.CanvasSize = UDim2.new(0, 0, 0, yOffset + 5)
     end
 
     updateDropdown()
 
-    -- Toggle Button (On/Off)
+    -- Toggle Button
     toggleButton = Instance.new("TextButton")
     toggleButton.Name = "ToggleButton"
-    toggleButton.Size = UDim2.new(0, 60, 0, 30)
-    toggleButton.Position = UDim2.new(0, 5, 0, 85)
-    toggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+    toggleButton.Size = UDim2.new(0, 100, 0, 35)
+    toggleButton.Position = UDim2.new(0, 5, 0, 120)
+    toggleButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
     toggleButton.BorderSizePixel = 0
-    toggleButton.Text = "OFF"
+    toggleButton.Text = "▶ FOLLOW"
     toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     toggleButton.TextSize = 14
     toggleButton.Font = Enum.Font.GothamBold
-    toggleButton.Parent = feature1Frame
+    toggleButton.Parent = featureFrame
+    
+    local toggleCorner = Instance.new("UICorner")
+    toggleCorner.CornerRadius = UDim.new(0, 5)
+    toggleCorner.Parent = toggleButton
 
     toggleButton.MouseButton1Click:Connect(function()
         if isFollowing then
-            -- Turn off
+            -- Turn OFF
             isFollowing = false
-            toggleButton.Text = "OFF"
-            toggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+            toggleButton.Text = "▶ FOLLOW"
+            toggleButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
             if followConnection then
                 followConnection:Disconnect()
                 followConnection = nil
             end
+            statusLabel.Text = "Status: ⚪ Idle"
+            statusLabel.TextColor3 = Color3.fromRGB(180, 180, 200)
         else
-            -- Turn on
+            -- Turn ON
             if selectedPlayer then
                 isFollowing = true
-                toggleButton.Text = "ON"
-                toggleButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-                -- Start following
+                toggleButton.Text = "⏹ STOP"
+                toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+                
                 if followConnection then
                     followConnection:Disconnect()
                 end
+                
                 followConnection = RunService.Heartbeat:Connect(function()
+                    if not isFollowing then return end
                     local targetChar = selectedPlayer.Character
                     if targetChar and targetChar:FindFirstChild("HumanoidRootPart") then
                         local targetRoot = targetChar.HumanoidRootPart
@@ -225,31 +285,69 @@ local function createGUI()
                         if character and character:FindFirstChild("HumanoidRootPart") then
                             local root = character.HumanoidRootPart
                             local targetCFrame = targetRoot.CFrame
-                            -- Changed from 5 to 2.5 to be closer for melee attacks
                             local behindPosition = targetCFrame.Position - (targetCFrame.LookVector * 2.5) + Vector3.new(0, 1.5, 0)
                             root.CFrame = CFrame.new(behindPosition, targetCFrame.Position)
                         end
                     end
                 end)
+                
+                statusLabel.Text = "Status: 🔴 Following " .. selectedPlayer.Name
+                statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
             else
                 -- No player selected
-                toggleButton.Text = "No Player!"
+                toggleButton.Text = "⚠ SELECT"
                 toggleButton.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
-                task.wait(1)
-                toggleButton.Text = "OFF"
-                toggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+                statusLabel.Text = "Status: ⚠ Please select a player!"
+                statusLabel.TextColor3 = Color3.fromRGB(255, 165, 0)
+                task.wait(1.5)
+                if not isFollowing then
+                    toggleButton.Text = "▶ FOLLOW"
+                    toggleButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+                    statusLabel.Text = "Status: ⚪ Idle"
+                    statusLabel.TextColor3 = Color3.fromRGB(180, 180, 200)
+                end
             end
         end
     end)
 
     -- Update dropdown when players join/leave
-    Players.PlayerAdded:Connect(updateDropdown)
-    Players.PlayerRemoving:Connect(updateDropdown)
+    Players.PlayerAdded:Connect(function()
+        updateDropdown()
+        if selectedPlayer and not Players:FindFirstChild(selectedPlayer.Name) then
+            selectedPlayer = nil
+            if isFollowing then
+                isFollowing = false
+                toggleButton.Text = "▶ FOLLOW"
+                toggleButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+                if followConnection then
+                    followConnection:Disconnect()
+                    followConnection = nil
+                end
+                statusLabel.Text = "Status: ⚪ Target left"
+                statusLabel.TextColor3 = Color3.fromRGB(255, 165, 0)
+            end
+        end
+    end)
+    
+    Players.PlayerRemoving:Connect(function(plr)
+        if selectedPlayer == plr then
+            selectedPlayer = nil
+            if isFollowing then
+                isFollowing = false
+                toggleButton.Text = "▶ FOLLOW"
+                toggleButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+                if followConnection then
+                    followConnection:Disconnect()
+                    followConnection = nil
+                end
+                statusLabel.Text = "Status: ⚪ Target left"
+                statusLabel.TextColor3 = Color3.fromRGB(255, 165, 0)
+            end
+        end
+        updateDropdown()
+    end)
 
-    -- Update canvas size for features frame
-    featuresFrame.CanvasSize = UDim2.new(0, 0, 0, 130) -- Add more height for future features
-
-    return screenGui
+    featuresFrame.CanvasSize = UDim2.new(0, 0, 0, 190)
 end
 
 -- Toggle hub with F5
@@ -267,15 +365,14 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
--- Create GUI initially but keep it closed
+-- Create GUI initially
 createGUI()
 
--- Print instructions
-print("JJS Hub loaded!")
+print("✨ JJS Hub loaded!")
 print("Press F5 to open/close the hub.")
-print("Select a player from the dropdown, then click the toggle button to fly behind them.")
+print("Select a player from the dropdown, then click FOLLOW to start.")
 
--- Cleanup function
+-- Cleanup
 local function cleanup()
     if followConnection then
         followConnection:Disconnect()
@@ -293,7 +390,6 @@ player.CharacterAdded:Connect(function(newChar)
     rootPart = character and character:FindFirstChild("HumanoidRootPart")
 end)
 
--- If character is nil, wait for it
 if not character then
     player.CharacterAdded:Wait()
     character = player.Character
