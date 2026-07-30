@@ -1,794 +1,593 @@
 // ==UserScript==
-// @name Jujutsu Shenanigans Auto Chase (Manual Attack)
-// @description Tự động bám sát sau lưng mục tiêu, đánh và skill thủ công
+// @name Jujutsu Shenanigans Auto Chase
+// @description Bám sát sau lưng mục tiêu, đánh và skill thủ công
 // @grant none
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    // Biến toàn cục
     let isActive = false;
     let targetPlayer = null;
     let guiElement = null;
-    let dragState = {
-        isDragging: false,
-        startX: 0,
-        startY: 0,
-        offsetX: 0,
-        offsetY: 0
-    };
+    let isDragging = false;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
 
-    // Style CSS cho GUI
+    // Chờ game load
+    function waitForGame() {
+        return new Promise((resolve) => {
+            const check = () => {
+                if (typeof game !== 'undefined' && game.Players && game.Players.LocalPlayer) {
+                    resolve();
+                } else {
+                    setTimeout(check, 500);
+                }
+            };
+            check();
+        });
+    }
+
+    // Style CSS
     const styles = `
-        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap');
-        
-        .jjs-auto-gui * {
+        .jjs-gui * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Quicksand', 'Segoe UI', sans-serif;
+            font-family: 'Segoe UI', sans-serif;
         }
         
-        .jjs-auto-gui {
+        .jjs-gui {
             position: fixed;
             top: 50px;
             right: 50px;
             z-index: 999999;
-            min-width: 350px;
-            background: linear-gradient(135deg, rgba(20, 20, 30, 0.97), rgba(30, 30, 45, 0.97));
-            backdrop-filter: blur(20px);
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 
-                        0 0 0 1px rgba(255, 255, 255, 0.1),
-                        0 0 30px rgba(138, 43, 226, 0.3);
+            width: 320px;
+            background: rgba(20, 20, 30, 0.95);
+            backdrop-filter: blur(15px);
+            border-radius: 12px;
+            border: 1px solid rgba(138, 43, 226, 0.4);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
             overflow: hidden;
-            transition: all 0.3s ease;
-            border: 1px solid rgba(138, 43, 226, 0.3);
+            display: none;
         }
         
-        .gui-header {
-            padding: 16px 20px;
-            background: linear-gradient(135deg, rgba(138, 43, 226, 0.3), rgba(75, 0, 130, 0.2));
+        .jjs-header {
+            padding: 14px 18px;
+            background: rgba(138, 43, 226, 0.3);
             border-bottom: 1px solid rgba(138, 43, 226, 0.3);
             display: flex;
             align-items: center;
             justify-content: space-between;
             cursor: grab;
             user-select: none;
-            -webkit-user-select: none;
-            position: relative;
         }
         
-        .gui-header:active {
+        .jjs-header:active {
             cursor: grabbing;
         }
         
-        .gui-header::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(138, 43, 226, 0.5), transparent);
-        }
-        
-        .gui-title {
-            font-size: 16px;
+        .jjs-title {
+            font-size: 15px;
             font-weight: 700;
             color: #fff;
-            text-shadow: 0 2px 10px rgba(138, 43, 226, 0.7);
-            letter-spacing: 1px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
+            letter-spacing: 0.5px;
         }
         
-        .gui-title-icon {
-            font-size: 22px;
-            filter: drop-shadow(0 0 10px rgba(138, 43, 226, 0.7));
-        }
-        
-        .close-btn {
-            width: 28px;
-            height: 28px;
+        .jjs-close {
+            width: 24px;
+            height: 24px;
             border-radius: 50%;
-            border: 1px solid rgba(255, 100, 100, 0.3);
-            background: rgba(255, 100, 100, 0.2);
-            color: #ff6b6b;
+            border: none;
+            background: rgba(255, 80, 80, 0.3);
+            color: #ff5050;
             cursor: pointer;
+            font-size: 14px;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.3s ease;
-            font-size: 14px;
-            font-weight: bold;
+            transition: 0.2s;
         }
         
-        .close-btn:hover {
-            background: rgba(255, 100, 100, 0.5);
-            border-color: rgba(255, 100, 100, 0.6);
+        .jjs-close:hover {
+            background: rgba(255, 80, 80, 0.6);
             transform: rotate(90deg);
-            box-shadow: 0 0 15px rgba(255, 100, 100, 0.4);
         }
         
-        .gui-body {
-            padding: 20px;
+        .jjs-body {
+            padding: 16px;
         }
         
-        .section-label {
-            display: block;
+        .jjs-label {
             font-size: 11px;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: rgba(180, 180, 255, 0.8);
+            letter-spacing: 1px;
+            color: rgba(200, 200, 255, 0.7);
+            margin-bottom: 8px;
+            display: block;
+        }
+        
+        .jjs-selected {
+            padding: 10px 14px;
+            background: rgba(138, 43, 226, 0.2);
+            border-radius: 8px;
+            border: 1px solid rgba(138, 43, 226, 0.3);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #fff;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        
+        .jjs-list {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-height: 180px;
+            overflow-y: auto;
             margin-bottom: 8px;
         }
         
-        .player-list-container {
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 10px;
-            border: 1px solid rgba(138, 43, 226, 0.2);
-            overflow: hidden;
-            margin-bottom: 15px;
-            max-height: 200px;
-            overflow-y: auto;
-            scrollbar-width: thin;
-            scrollbar-color: rgba(138, 43, 226, 0.5) transparent;
-        }
-        
-        .player-list-container::-webkit-scrollbar {
+        .jjs-list::-webkit-scrollbar {
             width: 4px;
         }
         
-        .player-list-container::-webkit-scrollbar-thumb {
+        .jjs-list::-webkit-scrollbar-thumb {
             background: rgba(138, 43, 226, 0.5);
             border-radius: 10px;
         }
         
-        .player-item {
-            padding: 12px 16px;
-            margin: 0;
+        .jjs-player {
+            padding: 10px 14px;
             cursor: pointer;
-            transition: all 0.2s ease;
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
             color: rgba(255, 255, 255, 0.7);
             font-size: 13px;
-            font-weight: 500;
+            transition: 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         
-        .player-item:last-child {
-            border-bottom: none;
-        }
-        
-        .player-item:hover {
+        .jjs-player:hover {
             background: rgba(138, 43, 226, 0.2);
-            color: white;
+            color: #fff;
         }
         
-        .player-item.selected {
+        .jjs-player.selected {
             background: rgba(138, 43, 226, 0.4);
-            color: white;
-            border-left: 3px solid #8e44ad;
-            box-shadow: 0 0 15px rgba(138, 43, 226, 0.3);
+            color: #fff;
+            border-left: 3px solid #9b59b6;
         }
         
-        .player-name {
+        .jjs-check {
+            color: #2ecc71;
+            font-weight: bold;
+            display: none;
+        }
+        
+        .jjs-player.selected .jjs-check {
+            display: block;
+        }
+        
+        .jjs-refresh {
+            width: 100%;
+            padding: 8px;
+            background: rgba(138, 43, 226, 0.2);
+            border: 1px solid rgba(138, 43, 226, 0.3);
+            border-radius: 6px;
+            color: rgba(255, 255, 255, 0.8);
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            transition: 0.2s;
+        }
+        
+        .jjs-refresh:hover {
+            background: rgba(138, 43, 226, 0.4);
+        }
+        
+        .jjs-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+        
+        .jjs-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #e74c3c;
+            flex-shrink: 0;
+        }
+        
+        .jjs-dot.active {
+            background: #2ecc71;
+            box-shadow: 0 0 10px rgba(46, 204, 113, 0.7);
+        }
+        
+        .jjs-status-text {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.8);
             flex: 1;
         }
         
-        .player-check {
-            opacity: 0;
-            transition: all 0.2s ease;
-            color: #2ed573;
-            font-weight: bold;
+        .jjs-toggle {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: 0.2s;
+            color: #fff;
         }
         
-        .player-item.selected .player-check {
-            opacity: 1;
+        .jjs-toggle.off {
+            background: linear-gradient(135deg, #6c3483, #8e44ad);
         }
         
-        .empty-list {
+        .jjs-toggle.on {
+            background: linear-gradient(135deg, #2ecc71, #8e44ad);
+        }
+        
+        .jjs-toggle:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .jjs-toggle:not(:disabled):hover {
+            transform: translateY(-1px);
+        }
+        
+        .jjs-info {
+            text-align: center;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.4);
+            margin-top: 10px;
+        }
+        
+        .jjs-empty {
             padding: 20px;
             text-align: center;
             color: rgba(255, 255, 255, 0.4);
             font-size: 12px;
         }
         
-        .refresh-btn {
-            width: 100%;
-            padding: 8px;
-            margin-top: 8px;
-            background: rgba(138, 43, 226, 0.2);
-            border: 1px solid rgba(138, 43, 226, 0.3);
-            border-radius: 8px;
-            color: rgba(255, 255, 255, 0.7);
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-weight: 600;
-        }
-        
-        .refresh-btn:hover {
-            background: rgba(138, 43, 226, 0.4);
-            color: white;
-        }
-        
-        .selected-info {
-            padding: 12px;
-            background: rgba(138, 43, 226, 0.15);
-            border-radius: 10px;
-            border: 1px solid rgba(138, 43, 226, 0.2);
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .selected-info .label {
-            font-size: 11px;
-            color: rgba(180, 180, 255, 0.6);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        
-        .selected-info .value {
-            font-size: 14px;
-            color: white;
-            font-weight: 600;
-            flex: 1;
-        }
-        
-        .status-section {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 15px;
-            padding: 12px;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-        }
-        
-        .status-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #ff4757;
-            box-shadow: 0 0 10px rgba(255, 71, 87, 0.5);
-            transition: all 0.3s ease;
-            flex-shrink: 0;
-        }
-        
-        .status-dot.active {
-            background: #2ed573;
-            box-shadow: 0 0 15px rgba(46, 213, 115, 0.7);
-            animation: jjsGlow 1.5s infinite;
-        }
-        
-        @keyframes jjsGlow {
-            0%, 100% { box-shadow: 0 0 10px rgba(46, 213, 115, 0.5); }
-            50% { box-shadow: 0 0 25px rgba(46, 213, 115, 0.9); }
-        }
-        
-        .status-text {
-            font-size: 13px;
-            color: rgba(255, 255, 255, 0.8);
-            font-weight: 500;
-            flex: 1;
-        }
-        
-        .toggle-btn {
-            width: 100%;
-            padding: 14px;
-            border: none;
-            border-radius: 12px;
-            font-size: 15px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            position: relative;
-            overflow: hidden;
-            margin-top: 5px;
-        }
-        
-        .toggle-btn::after {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
-            transform: rotate(45deg);
-            transition: all 0.5s ease;
-        }
-        
-        .toggle-btn:hover::after {
-            left: 50%;
-        }
-        
-        .toggle-btn.off {
-            background: linear-gradient(135deg, #6c3483, #8e44ad);
-            color: white;
-            box-shadow: 0 5px 20px rgba(138, 43, 226, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-        
-        .toggle-btn.on {
-            background: linear-gradient(135deg, #2ed573, #8e44ad);
-            color: white;
-            box-shadow: 0 5px 20px rgba(46, 213, 115, 0.4);
-            animation: buttonGlow 2s infinite;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-        }
-        
-        @keyframes buttonGlow {
-            0%, 100% { box-shadow: 0 5px 20px rgba(46, 213, 115, 0.4); }
-            50% { box-shadow: 0 5px 30px rgba(46, 213, 115, 0.7), 0 0 40px rgba(138, 43, 226, 0.3); }
-        }
-        
-        .toggle-btn:hover {
-            transform: translateY(-2px);
-        }
-        
-        .toggle-btn:active {
-            transform: translateY(0);
-        }
-        
-        .toggle-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-        
-        .info-text {
-            margin-top: 12px;
-            font-size: 11px;
-            color: rgba(255, 255, 255, 0.4);
-            text-align: center;
-            font-weight: 500;
-        }
-    `;
-
-    // Inject styles
-    function injectStyles() {
-        const styleElement = document.createElement('style');
-        styleElement.textContent = styles;
-        document.head.appendChild(styleElement);
-    }
-
-    // Tạo GUI
-    function createGUI() {
-        guiElement = document.createElement('div');
-        guiElement.className = 'jjs-auto-gui';
-        guiElement.innerHTML = `
-            <div class="gui-header" id="gui-drag-handle">
-                <div class="gui-title">
-                    <span class="gui-title-icon">👁️</span>
-                    Six Eyes Chase
-                </div>
-                <button class="close-btn" id="gui-close-btn">✕</button>
-            </div>
-            <div class="gui-body">
-                <div class="selected-info">
-                    <span class="label">🎯 Mục tiêu:</span>
-                    <span class="value" id="selected-target-display">Chưa chọn</span>
-                </div>
-                
-                <label class="section-label">📋 Danh sách người chơi</label>
-                <div class="player-list-container" id="player-list">
-                    <div class="empty-list">Đang tải danh sách...</div>
-                </div>
-                
-                <button class="refresh-btn" id="refresh-players-btn">
-                    🔄 Làm mới danh sách
-                </button>
-                
-                <div class="status-section" style="margin-top: 15px;">
-                    <div class="status-dot" id="status-dot"></div>
-                    <span class="status-text" id="status-text">Chưa kích hoạt</span>
-                </div>
-                
-                <button class="toggle-btn off" id="toggle-btn" disabled>
-                    ▶ KÍCH HOẠT
-                </button>
-                
-                <div class="info-text">
-                    F5 để mở/đóng | Kéo thả để di chuyển | Đánh & Skill thủ công
-                </div>
-            </div>
-        `;
-
-        document.body.appendChild(guiElement);
-        setupEventListeners();
-        setupDragFunctionality();
-        updatePlayerList();
-        
-        // Auto refresh mỗi 5 giây
-        setInterval(() => {
-            if (guiElement.style.display !== 'none') {
-                updatePlayerList();
-            }
-        }, 5000);
-    }
-
-    // Kéo thả GUI
-    function setupDragFunctionality() {
-        const header = document.getElementById('gui-drag-handle');
-        
-        header.addEventListener('mousedown', (e) => {
-            if (e.target.tagName === 'BUTTON') return;
-            
-            dragState.isDragging = true;
-            const rect = guiElement.getBoundingClientRect();
-            dragState.offsetX = e.clientX - rect.left;
-            dragState.offsetY = e.clientY - rect.top;
-            
-            guiElement.style.transition = 'none';
-            e.preventDefault();
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (!dragState.isDragging) return;
-            
-            const newX = e.clientX - dragState.offsetX;
-            const newY = e.clientY - dragState.offsetY;
-            
-            const maxX = window.innerWidth - guiElement.offsetWidth;
-            const maxY = window.innerHeight - guiElement.offsetHeight;
-            
-            guiElement.style.right = 'auto';
-            guiElement.style.top = 'auto';
-            guiElement.style.left = Math.max(0, Math.min(newX, maxX)) + 'px';
-            guiElement.style.top = Math.max(0, Math.min(newY, maxY)) + 'px';
-        });
-
-        document.addEventListener('mouseup', () => {
-            if (dragState.isDragging) {
-                dragState.isDragging = false;
-                guiElement.style.transition = 'all 0.3s ease';
-            }
-        });
-    }
-
-    // Event listeners
-    function setupEventListeners() {
-        // Nút đóng
-        document.getElementById('gui-close-btn').addEventListener('click', () => {
-            guiElement.style.display = 'none';
-        });
-
-        // Nút toggle ON/OFF
-        document.getElementById('toggle-btn').addEventListener('click', toggleAutoChase);
-        
-        // Nút refresh
-        document.getElementById('refresh-players-btn').addEventListener('click', updatePlayerList);
-
-        // Phím tắt F5
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'F5') {
-                e.preventDefault();
-                if (guiElement.style.display === 'none') {
-                    guiElement.style.display = 'block';
-                    updatePlayerList();
-                } else {
-                    guiElement.style.display = 'none';
-                }
-            }
-        });
-    }
-
-    // Lấy danh sách players
-    function getAllPlayers() {
-        try {
-            const players = game.Players.GetPlayers();
-            const localPlayer = game.Players.LocalPlayer;
-            return players
-                .filter(p => p !== localPlayer)
-                .map(p => ({
-                    name: p.Name,
-                    displayName: p.DisplayName || p.Name,
-                    player: p
-                }));
-        } catch (e) {
-            console.error('Lỗi lấy danh sách players:', e);
-            return [];
-        }
-    }
-
-    // Cập nhật danh sách player
-    function updatePlayerList() {
-        const listContainer = document.getElementById('player-list');
-        const players = getAllPlayers();
-        const currentTarget = document.getElementById('selected-target-display').textContent;
-        
-        listContainer.innerHTML = '';
-        
-        if (players.length === 0) {
-            listContainer.innerHTML = '<div class="empty-list">Không có người chơi nào khác</div>';
-            return;
-        }
-        
-        players.forEach(({name, displayName}) => {
-            const item = document.createElement('div');
-            item.className = 'player-item';
-            item.innerHTML = `
-                <span class="player-name">${displayName}</span>
-                <span class="player-check">✓</span>
-            `;
-            
-            // Highlight player đang được chọn
-            if (name === currentTarget) {
-                item.classList.add('selected');
-            }
-            
-            item.addEventListener('click', () => {
-                selectPlayer(name, displayName);
-            });
-            
-            listContainer.appendChild(item);
-        });
-    }
-
-    // Chọn player
-    function selectPlayer(name, displayName) {
-        // Update display
-        document.getElementById('selected-target-display').textContent = name;
-        
-        // Update danh sách highlight
-        document.querySelectorAll('.player-item').forEach(item => {
-            item.classList.remove('selected');
-            if (item.querySelector('.player-name').textContent === displayName) {
-                item.classList.add('selected');
-            }
-        });
-        
-        // Enable nút toggle
-        document.getElementById('toggle-btn').disabled = false;
-        
-        // Nếu đang chạy, cập nhật target mới
-        if (isActive) {
-            const targetPlayerObj = game.Players.FindFirstChild(name);
-            if (targetPlayerObj && targetPlayerObj.Character) {
-                targetPlayer = targetPlayerObj;
-                showNotification(`Đã chuyển mục tiêu sang: ${displayName}`);
-            } else {
-                showNotification('Người chơi chưa spawn hoặc đã thoát!');
-            }
-        }
-    }
-
-    // Toggle auto chase
-    function toggleAutoChase() {
-        const btn = document.getElementById('toggle-btn');
-        const dot = document.getElementById('status-dot');
-        const statusText = document.getElementById('status-text');
-        const targetName = document.getElementById('selected-target-display').textContent;
-
-        if (!isActive) {
-            if (targetName === 'Chưa chọn') {
-                showNotification('Vui lòng chọn mục tiêu từ danh sách!');
-                return;
-            }
-
-            // Tìm player
-            const targetPlayerObj = game.Players.FindFirstChild(targetName);
-            if (!targetPlayerObj) {
-                showNotification('Không tìm thấy người chơi này!');
-                return;
-            }
-            
-            if (!targetPlayerObj.Character) {
-                showNotification('Người chơi chưa spawn! Đợi họ spawn rồi thử lại.');
-                return;
-            }
-
-            targetPlayer = targetPlayerObj;
-            isActive = true;
-            
-            btn.textContent = '⏸ TẮT';
-            btn.className = 'toggle-btn on';
-            dot.className = 'status-dot active';
-            statusText.textContent = `Đang bám sát: ${targetPlayer.DisplayName || targetPlayer.Name}`;
-            
-            showNotification(`Bắt đầu bám sát ${targetPlayer.DisplayName || targetPlayer.Name}! Đánh và skill thủ công.`);
-            startChaseLoop();
-        } else {
-            isActive = false;
-            targetPlayer = null;
-            
-            btn.textContent = '▶ KÍCH HOẠT';
-            btn.className = 'toggle-btn off';
-            dot.className = 'status-dot';
-            statusText.textContent = 'Đã dừng';
-            
-            showNotification('Đã dừng bám sát!');
-        }
-    }
-
-    // Main chase loop - CHỈ di chuyển, KHÔNG đánh
-    function startChaseLoop() {
-        if (!isActive || !targetPlayer) return;
-
-        try {
-            const localPlayer = game.Players.LocalPlayer;
-            const character = localPlayer.Character;
-            const targetCharacter = targetPlayer.Character;
-
-            if (!character || !targetCharacter) {
-                if (!targetCharacter) {
-                    statusText.textContent = 'Mục tiêu đã thoát hoặc chưa spawn!';
-                    // Đợi target respawn
-                    waitForTargetRespawn();
-                    return;
-                }
-                return;
-            }
-
-            const humanoid = character.FindFirstChildOfClass('Humanoid');
-            const targetHumanoid = targetCharacter.FindFirstChildOfClass('Humanoid');
-            const humanoidRootPart = character.FindFirstChild('HumanoidRootPart');
-            const targetRootPart = targetCharacter.FindFirstChild('HumanoidRootPart');
-
-            if (!humanoid || !targetHumanoid || !humanoidRootPart || !targetRootPart) return;
-
-            // Kiểm tra health
-            if (humanoid.Health <= 0) {
-                document.getElementById('status-text').textContent = 'Bạn đã chết! Đợi respawn...';
-                waitForRespawn();
-                return;
-            }
-
-            if (targetHumanoid.Health <= 0) {
-                document.getElementById('status-text').textContent = 'Mục tiêu đã chết! Đợi respawn...';
-                waitForTargetRespawn();
-                return;
-            }
-
-            // Tính toán vị trí đứng sau lưng target
-            const distance = 5; // Khoảng cách 5 studs
-            const lookVector = targetRootPart.CFrame.LookVector;
-            
-            const behindPosition = new Vector3(
-                targetRootPart.Position.X - lookVector.X * distance,
-                targetRootPart.Position.Y,
-                targetRootPart.Position.Z - lookVector.Z * distance
-            );
-
-            // Di chuyển ra sau target
-            humanoid:MoveTo(behindPosition);
-            
-            // Xoay mặt nhìn vào target
-            humanoidRootPart.CFrame = CFrame.new(
-                humanoidRootPart.Position,
-                targetRootPart.Position
-            );
-
-            // Cập nhật status
-            const dist = Math.floor((humanoidRootPart.Position - targetRootPart.Position).Magnitude);
-            document.getElementById('status-text').textContent = 
-                `Đang bám sát: ${targetPlayer.DisplayName || targetPlayer.Name} (${dist}m)`;
-
-        } catch (e) {
-            console.error('Lỗi trong chase loop:', e);
-        }
-
-        // Lặp lại
-        if (isActive) {
-            requestAnimationFrame(startChaseLoop);
-        }
-    }
-
-    // Chờ target respawn
-    function waitForTargetRespawn() {
-        if (!targetPlayer || !isActive) return;
-        
-        const checkInterval = setInterval(() => {
-            if (!isActive || !targetPlayer) {
-                clearInterval(checkInterval);
-                return;
-            }
-            
-            const targetCharacter = targetPlayer.Character;
-            if (targetCharacter && targetCharacter.FindFirstChildOfClass('Humanoid') && 
-                targetCharacter.FindFirstChildOfClass('Humanoid').Health > 0) {
-                clearInterval(checkInterval);
-                document.getElementById('status-text').textContent = 
-                    `Đang bám sát: ${targetPlayer.DisplayName || targetPlayer.Name}`;
-                showNotification('Mục tiêu đã respawn! Tiếp tục bám sát.');
-            }
-        }, 1000);
-    }
-
-    // Chờ bản thân respawn
-    function waitForRespawn() {
-        const localPlayer = game.Players.LocalPlayer;
-        
-        const checkInterval = setInterval(() => {
-            if (!isActive) {
-                clearInterval(checkInterval);
-                return;
-            }
-            
-            const character = localPlayer.Character;
-            if (character && character.FindFirstChildOfClass('Humanoid') && 
-                character.FindFirstChildOfClass('Humanoid').Health > 0) {
-                clearInterval(checkInterval);
-                document.getElementById('status-text').textContent = 
-                    `Đang bám sát: ${targetPlayer.DisplayName || targetPlayer.Name}`;
-                showNotification('Đã respawn! Tiếp tục bám sát.');
-            }
-        }, 1000);
-    }
-
-    // Hiển thị thông báo
-    function showNotification(message) {
-        const notification = document.createElement('div');
-        notification.style.cssText = `
+        .jjs-notif {
             position: fixed;
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
             background: rgba(138, 43, 226, 0.95);
-            color: white;
-            padding: 12px 24px;
-            border-radius: 25px;
-            font-family: 'Quicksand', sans-serif;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 13px;
             font-weight: 600;
-            font-size: 14px;
             z-index: 9999999;
-            box-shadow: 0 10px 30px rgba(138, 43, 226, 0.5);
-            animation: slideDown 0.3s ease, fadeOut 0.3s ease 1.7s forwards;
             pointer-events: none;
-        `;
-        notification.textContent = message;
-        document.body.appendChild(notification);
+            animation: jjsSlideDown 0.3s ease, jjsFadeOut 0.3s ease 1.7s forwards;
+        }
         
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
-            }
-        }, 2000);
+        @keyframes jjsSlideDown {
+            from { transform: translateX(-50%) translateY(-50px); opacity: 0; }
+            to { transform: translateX(-50%) translateY(0); opacity: 1; }
+        }
+        
+        @keyframes jjsFadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+    `;
+
+    function injectStyles() {
+        const style = document.createElement('style');
+        style.textContent = styles;
+        document.head.appendChild(style);
     }
 
-    // Thêm animation styles
-    function addAnimationStyles() {
-        const animStyles = document.createElement('style');
-        animStyles.textContent = `
-            @keyframes slideDown {
-                from { transform: translateX(-50%) translateY(-100px); opacity: 0; }
-                to { transform: translateX(-50%) translateY(0); opacity: 1; }
+    function notify(msg) {
+        const n = document.createElement('div');
+        n.className = 'jjs-notif';
+        n.textContent = msg;
+        document.body.appendChild(n);
+        setTimeout(() => n.remove(), 2000);
+    }
+
+    function getAllPlayers() {
+        try {
+            const all = game.Players.GetPlayers();
+            const local = game.Players.LocalPlayer;
+            return all.filter(p => p !== local).map(p => ({
+                name: p.Name,
+                display: p.DisplayName || p.Name,
+                player: p
+            }));
+        } catch(e) {
+            return [];
+        }
+    }
+
+    function updateList() {
+        const list = document.getElementById('jjs-list');
+        const players = getAllPlayers();
+        const currentTarget = document.getElementById('jjs-selected-name').textContent;
+        
+        list.innerHTML = '';
+        
+        if (players.length === 0) {
+            list.innerHTML = '<div class="jjs-empty">Không có người chơi nào</div>';
+            return;
+        }
+        
+        players.forEach(({name, display}) => {
+            const div = document.createElement('div');
+            div.className = 'jjs-player';
+            div.innerHTML = `<span>${display}</span><span class="jjs-check">✓</span>`;
+            
+            if (name === currentTarget) {
+                div.classList.add('selected');
             }
-            @keyframes fadeOut {
-                from { opacity: 1; }
-                to { opacity: 0; }
+            
+            div.addEventListener('click', () => selectPlayer(name, display));
+            list.appendChild(div);
+        });
+    }
+
+    function selectPlayer(name, display) {
+        document.getElementById('jjs-selected-name').textContent = name;
+        document.getElementById('jjs-toggle').disabled = false;
+        
+        document.querySelectorAll('.jjs-player').forEach(el => {
+            el.classList.remove('selected');
+            if (el.querySelector('span').textContent === display) {
+                el.classList.add('selected');
             }
+        });
+        
+        if (isActive) {
+            const tp = game.Players.FindFirstChild(name);
+            if (tp && tp.Character) {
+                targetPlayer = tp;
+                notify(`Đã chuyển mục tiêu: ${display}`);
+            } else {
+                notify('Người chơi chưa spawn!');
+            }
+        }
+    }
+
+    function toggle() {
+        const btn = document.getElementById('jjs-toggle');
+        const dot = document.getElementById('jjs-dot');
+        const statusText = document.getElementById('jjs-status-text');
+        const targetName = document.getElementById('jjs-selected-name').textContent;
+
+        if (!isActive) {
+            if (targetName === 'Chưa chọn') {
+                notify('Vui lòng chọn mục tiêu!');
+                return;
+            }
+
+            const tp = game.Players.FindFirstChild(targetName);
+            if (!tp) {
+                notify('Không tìm thấy người chơi!');
+                return;
+            }
+            if (!tp.Character) {
+                notify('Người chơi chưa spawn!');
+                return;
+            }
+
+            targetPlayer = tp;
+            isActive = true;
+            
+            btn.textContent = '⏸ TẮT';
+            btn.className = 'jjs-toggle on';
+            dot.className = 'jjs-dot active';
+            statusText.textContent = `Đang bám: ${targetPlayer.DisplayName || targetPlayer.Name}`;
+            
+            notify(`Bắt đầu bám sát ${targetPlayer.DisplayName || targetPlayer.Name}`);
+            chaseLoop();
+        } else {
+            isActive = false;
+            targetPlayer = null;
+            
+            btn.textContent = '▶ KÍCH HOẠT';
+            btn.className = 'jjs-toggle off';
+            dot.className = 'jjs-dot';
+            statusText.textContent = 'Đã dừng';
+            
+            notify('Đã dừng bám sát');
+        }
+    }
+
+    function chaseLoop() {
+        if (!isActive || !targetPlayer) return;
+
+        try {
+            const lp = game.Players.LocalPlayer;
+            const char = lp.Character;
+            const tChar = targetPlayer.Character;
+
+            if (!char || !tChar) {
+                if (!tChar) {
+                    document.getElementById('jjs-status-text').textContent = 'Chờ mục tiêu spawn...';
+                    waitTargetSpawn();
+                    return;
+                }
+                requestAnimationFrame(chaseLoop);
+                return;
+            }
+
+            const hum = char.FindFirstChildOfClass('Humanoid');
+            const tHum = tChar.FindFirstChildOfClass('Humanoid');
+            const hrp = char.FindFirstChild('HumanoidRootPart');
+            const tHrp = tChar.FindFirstChild('HumanoidRootPart');
+
+            if (!hum || !tHum || !hrp || !tHrp) {
+                requestAnimationFrame(chaseLoop);
+                return;
+            }
+
+            if (hum.Health <= 0) {
+                document.getElementById('jjs-status-text').textContent = 'Bạn đã chết...';
+                waitRespawn();
+                return;
+            }
+
+            if (tHum.Health <= 0) {
+                document.getElementById('jjs-status-text').textContent = 'Mục tiêu đã chết...';
+                waitTargetSpawn();
+                return;
+            }
+
+            // Tính vị trí sau lưng
+            const dist = 5;
+            const lv = tHrp.CFrame.LookVector;
+            const behind = new Vector3(
+                tHrp.Position.X - lv.X * dist,
+                tHrp.Position.Y,
+                tHrp.Position.Z - lv.Z * dist
+            );
+
+            hum:MoveTo(behind);
+            hrp.CFrame = CFrame.new(hrp.Position, tHrp.Position);
+
+            const d = Math.floor((hrp.Position - tHrp.Position).Magnitude);
+            document.getElementById('jjs-status-text').textContent = 
+                `Đang bám: ${targetPlayer.DisplayName || targetPlayer.Name} (${d}m)`;
+
+        } catch(e) {}
+
+        if (isActive) requestAnimationFrame(chaseLoop);
+    }
+
+    function waitTargetSpawn() {
+        if (!targetPlayer || !isActive) return;
+        const check = setInterval(() => {
+            if (!isActive || !targetPlayer) { clearInterval(check); return; }
+            if (targetPlayer.Character && targetPlayer.Character.FindFirstChildOfClass('Humanoid') && 
+                targetPlayer.Character.FindFirstChildOfClass('Humanoid').Health > 0) {
+                clearInterval(check);
+                document.getElementById('jjs-status-text').textContent = 
+                    `Đang bám: ${targetPlayer.DisplayName || targetPlayer.Name}`;
+                notify('Mục tiêu đã spawn!');
+            }
+        }, 1000);
+    }
+
+    function waitRespawn() {
+        const lp = game.Players.LocalPlayer;
+        const check = setInterval(() => {
+            if (!isActive) { clearInterval(check); return; }
+            if (lp.Character && lp.Character.FindFirstChildOfClass('Humanoid') && 
+                lp.Character.FindFirstChildOfClass('Humanoid').Health > 0) {
+                clearInterval(check);
+                document.getElementById('jjs-status-text').textContent = 
+                    `Đang bám: ${targetPlayer.DisplayName || targetPlayer.Name}`;
+                notify('Đã spawn!');
+            }
+        }, 1000);
+    }
+
+    function createGUI() {
+        guiElement = document.createElement('div');
+        guiElement.className = 'jjs-gui';
+        guiElement.id = 'jjs-gui';
+        guiElement.innerHTML = `
+            <div class="jjs-header" id="jjs-header">
+                <span class="jjs-title">👁️ Chase GUI</span>
+                <button class="jjs-close" id="jjs-close">✕</button>
+            </div>
+            <div class="jjs-body">
+                <span class="jjs-label">🎯 Mục tiêu hiện tại</span>
+                <div class="jjs-selected">
+                    <span id="jjs-selected-name">Chưa chọn</span>
+                </div>
+                
+                <span class="jjs-label">📋 Danh sách người chơi</span>
+                <div class="jjs-list" id="jjs-list">
+                    <div class="jjs-empty">Đang tải...</div>
+                </div>
+                
+                <button class="jjs-refresh" id="jjs-refresh">🔄 Làm mới danh sách</button>
+                
+                <div class="jjs-status">
+                    <div class="jjs-dot" id="jjs-dot"></div>
+                    <span class="jjs-status-text" id="jjs-status-text">Chưa kích hoạt</span>
+                </div>
+                
+                <button class="jjs-toggle off" id="jjs-toggle" disabled>▶ KÍCH HOẠT</button>
+                
+                <div class="jjs-info">F5: Mở/Đóng GUI | Kéo thả để di chuyển</div>
+            </div>
         `;
-        document.head.appendChild(animStyles);
+        
+        document.body.appendChild(guiElement);
+        
+        // Event listeners
+        document.getElementById('jjs-close').addEventListener('click', () => {
+            guiElement.style.display = 'none';
+        });
+        
+        document.getElementById('jjs-toggle').addEventListener('click', toggle);
+        document.getElementById('jjs-refresh').addEventListener('click', updateList);
+        
+        // Drag
+        const header = document.getElementById('jjs-header');
+        header.addEventListener('mousedown', (e) => {
+            if (e.target.tagName === 'BUTTON') return;
+            isDragging = true;
+            const rect = guiElement.getBoundingClientRect();
+            dragOffsetX = e.clientX - rect.left;
+            dragOffsetY = e.clientY - rect.top;
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            guiElement.style.left = (e.clientX - dragOffsetX) + 'px';
+            guiElement.style.top = (e.clientY - dragOffsetY) + 'px';
+            guiElement.style.right = 'auto';
+        });
+        
+        document.addEventListener('mouseup', () => { isDragging = false; });
+        
+        // F5 toggle
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'F5') {
+                e.preventDefault();
+                if (guiElement.style.display === 'none' || guiElement.style.display === '') {
+                    guiElement.style.display = 'block';
+                    updateList();
+                } else {
+                    guiElement.style.display = 'none';
+                }
+            }
+        });
+        
+        updateList();
     }
 
-    // Khởi tạo
     async function init() {
         injectStyles();
-        addAnimationStyles();
         await waitForGame();
         createGUI();
-        console.log('Jujutsu Shenanigans Auto Chase đã sẵn sàng!');
-        console.log('- F5: Mở/đóng GUI');
-        console.log('- Chọn mục tiêu từ danh sách');
-        console.log('- Nhấn KÍCH HOẠT để bắt đầu bám sát');
-        console.log('- Đánh và skill là THỦ CÔNG (bạn tự bấm)');
+        console.log('JJK Chase GUI ready! F5 to open/close.');
     }
 
-    // Chạy
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
