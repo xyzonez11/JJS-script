@@ -1,8 +1,6 @@
--- JJK Chase GUI - Solara Executor
+-- JJK Chase GUI - TELEPORT sau lưng
 local Player = game.Players.LocalPlayer
-local RunService = game.RunService
 local UserInputService = game.UserInputService
-local TweenService = game.TweenService
 
 local isActive = false
 local targetPlayer = nil
@@ -10,6 +8,7 @@ local gui = nil
 local dragging = false
 local dragStart = nil
 local startPos = nil
+local connection = nil
 
 -- Tạo GUI
 local function createGUI()
@@ -17,8 +16,8 @@ local function createGUI()
     gui.Name = "JJKChase"
     gui.Parent = game.CoreGui
     gui.ResetOnSpawn = false
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     
-    -- Main
     local main = Instance.new("Frame")
     main.Name = "Main"
     main.Size = UDim2.new(0, 300, 0, 350)
@@ -26,11 +25,10 @@ local function createGUI()
     main.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
     main.BorderSizePixel = 0
     main.Visible = false
+    main.Active = true
     main.Parent = gui
     
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 10)
-    corner.Parent = main
+    Instance.new("UICorner", main).CornerRadius = UDim.new(0, 10)
     
     local stroke = Instance.new("UIStroke")
     stroke.Color = Color3.fromRGB(138, 43, 226)
@@ -44,13 +42,11 @@ local function createGUI()
     header.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
     header.BackgroundTransparency = 0.7
     header.BorderSizePixel = 0
+    header.Active = true
     header.Parent = main
     
-    local hCorner = Instance.new("UICorner")
-    hCorner.CornerRadius = UDim.new(0, 10)
-    hCorner.Parent = header
+    Instance.new("UICorner", header).CornerRadius = UDim.new(0, 10)
     
-    -- Title
     local title = Instance.new("TextLabel")
     title.Size = UDim2.new(1, -50, 1, 0)
     title.Position = UDim2.new(0, 15, 0, 0)
@@ -62,7 +58,6 @@ local function createGUI()
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.Parent = header
     
-    -- Close btn
     local close = Instance.new("TextButton")
     close.Size = UDim2.new(0, 25, 0, 25)
     close.Position = UDim2.new(1, -35, 0.5, -12)
@@ -74,15 +69,13 @@ local function createGUI()
     close.TextSize = 14
     close.Parent = header
     
-    local cCorner = Instance.new("UICorner")
-    cCorner.CornerRadius = UDim.new(1, 0)
-    cCorner.Parent = close
+    Instance.new("UICorner", close).CornerRadius = UDim.new(1, 0)
     
     close.MouseButton1Click:Connect(function()
         main.Visible = false
     end)
     
-    -- Drag
+    -- DRAG
     header.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
@@ -104,16 +97,16 @@ local function createGUI()
         end
     end)
     
-    -- Selected target
-    local selectedFrame = Instance.new("Frame")
-    selectedFrame.Size = UDim2.new(1, -30, 0, 35)
-    selectedFrame.Position = UDim2.new(0, 15, 0, 50)
-    selectedFrame.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-    selectedFrame.BackgroundTransparency = 0.8
-    selectedFrame.BorderSizePixel = 0
-    selectedFrame.Parent = main
+    -- Selected target display
+    local selFrame = Instance.new("Frame")
+    selFrame.Size = UDim2.new(1, -30, 0, 35)
+    selFrame.Position = UDim2.new(0, 15, 0, 50)
+    selFrame.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+    selFrame.BackgroundTransparency = 0.8
+    selFrame.BorderSizePixel = 0
+    selFrame.Parent = main
     
-    Instance.new("UICorner", selectedFrame).CornerRadius = UDim.new(0, 6)
+    Instance.new("UICorner", selFrame).CornerRadius = UDim.new(0, 6)
     
     local selLabel = Instance.new("TextLabel")
     selLabel.Size = UDim2.new(0, 80, 1, 0)
@@ -124,7 +117,7 @@ local function createGUI()
     selLabel.Font = Enum.Font.GothamSemibold
     selLabel.TextSize = 11
     selLabel.TextXAlignment = Enum.TextXAlignment.Left
-    selLabel.Parent = selectedFrame
+    selLabel.Parent = selFrame
     
     local selName = Instance.new("TextLabel")
     selName.Name = "SelectedName"
@@ -136,7 +129,7 @@ local function createGUI()
     selName.Font = Enum.Font.GothamBold
     selName.TextSize = 12
     selName.TextXAlignment = Enum.TextXAlignment.Left
-    selName.Parent = selectedFrame
+    selName.Parent = selFrame
     
     -- List label
     local listLabel = Instance.new("TextLabel")
@@ -150,7 +143,7 @@ local function createGUI()
     listLabel.TextXAlignment = Enum.TextXAlignment.Left
     listLabel.Parent = main
     
-    -- Player scrolling list
+    -- Player list
     local scroll = Instance.new("ScrollingFrame")
     scroll.Name = "PlayerScroll"
     scroll.Size = UDim2.new(1, -30, 0, 120)
@@ -169,7 +162,7 @@ local function createGUI()
     listLayout.Padding = UDim.new(0, 2)
     listLayout.Parent = scroll
     
-    -- Refresh button
+    -- Refresh
     local refreshBtn = Instance.new("TextButton")
     refreshBtn.Size = UDim2.new(1, -30, 0, 30)
     refreshBtn.Position = UDim2.new(0, 15, 0, 238)
@@ -219,7 +212,7 @@ local function createGUI()
     statusText.TextXAlignment = Enum.TextXAlignment.Left
     statusText.Parent = statusFrame
     
-    -- Toggle button
+    -- Toggle
     local toggleBtn = Instance.new("TextButton")
     toggleBtn.Name = "ToggleBtn"
     toggleBtn.Size = UDim2.new(1, -30, 0, 35)
@@ -238,25 +231,11 @@ local function createGUI()
         toggleChase()
     end)
     
-    -- Info text
-    local info = Instance.new("TextLabel")
-    info.Size = UDim2.new(1, -30, 0, 15)
-    info.Position = UDim2.new(0, 15, 0, 352)
-    info.BackgroundTransparency = 1
-    info.Text = "F5: Mở/Đóng GUI | Kéo thả để di chuyển"
-    info.TextColor3 = Color3.fromRGB(150, 150, 150)
-    info.Font = Enum.Font.Gotham
-    info.TextSize = 9
-    info.TextXAlignment = Enum.TextXAlignment.Center
-    info.Parent = main
-    
     return main
 end
 
--- Update player list
 function updatePlayerList()
     local scroll = gui.Main.PlayerScroll
-    -- Clear
     for _, child in pairs(scroll:GetChildren()) do
         if child:IsA("TextButton") then
             child:Destroy()
@@ -264,10 +243,11 @@ function updatePlayerList()
     end
     
     local players = game.Players:GetPlayers()
-    local selName = gui.Main:FindFirstChild("SelectedName", true)
+    local count = 0
     
     for _, p in pairs(players) do
         if p ~= Player then
+            count = count + 1
             local btn = Instance.new("TextButton")
             btn.Size = UDim2.new(1, 0, 0, 28)
             btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -280,29 +260,19 @@ function updatePlayerList()
             btn.AutoButtonColor = false
             btn.Parent = scroll
             
-            if selName and selName.Text == p.Name then
-                btn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-                btn.BackgroundTransparency = 0.5
-                btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-            end
-            
             btn.MouseButton1Click:Connect(function()
                 selectPlayer(p)
             end)
         end
     end
     
-    scroll.CanvasSize = UDim2.new(0, 0, 0, #players * 28)
+    scroll.CanvasSize = UDim2.new(0, 0, 0, count * 30)
 end
 
--- Select player
 function selectPlayer(p)
     local selName = gui.Main:FindFirstChild("SelectedName", true)
-    if selName then
-        selName.Text = p.Name
-    end
+    if selName then selName.Text = p.Name end
     
-    -- Update highlights
     local scroll = gui.Main.PlayerScroll
     for _, btn in pairs(scroll:GetChildren()) do
         if btn:IsA("TextButton") then
@@ -317,12 +287,8 @@ function selectPlayer(p)
             end
         end
     end
-    
-    -- Enable toggle
-    gui.Main.ToggleBtn.AutoButtonColor = false
 end
 
--- Notification
 function notify(msg)
     local notif = Instance.new("Frame")
     notif.Size = UDim2.new(0, 250, 0, 35)
@@ -346,7 +312,6 @@ function notify(msg)
     game.Debris:AddItem(notif, 2)
 end
 
--- Toggle chase
 function toggleChase()
     local btn = gui.Main.ToggleBtn
     local dot = gui.Main:FindFirstChild("StatusDot", true)
@@ -379,7 +344,7 @@ function toggleChase()
         statusText.Text = "Đang bám: " .. tp.DisplayName
         
         notify("✅ Bắt đầu bám sát " .. tp.DisplayName)
-        chaseLoop()
+        tpLoop()
     else
         isActive = false
         targetPlayer = nil
@@ -393,10 +358,8 @@ function toggleChase()
     end
 end
 
--- Chase loop
-function chaseLoop()
-    if not isActive or not targetPlayer then return end
-    
+-- TELEPORT ra sau lưng
+function tpLoop()
     task.spawn(function()
         while isActive and targetPlayer do
             local char = Player.Character
@@ -405,20 +368,15 @@ function chaseLoop()
             if char and tChar then
                 local hrp = char:FindFirstChild("HumanoidRootPart")
                 local tHrp = tChar:FindFirstChild("HumanoidRootPart")
-                local hum = char:FindFirstChildOfClass("Humanoid")
                 
-                if hrp and tHrp and hum then
-                    -- Vị trí sau lưng
+                if hrp and tHrp then
+                    -- Tính vị trí sau lưng target
                     local dist = 5
                     local lv = tHrp.CFrame.LookVector
-                    local behindPos = Vector3.new(
-                        tHrp.Position.X - lv.X * dist,
-                        tHrp.Position.Y,
-                        tHrp.Position.Z - lv.Z * dist
-                    )
+                    local behindPos = tHrp.Position - (lv * dist)
                     
-                    hum:MoveTo(behindPos)
-                    hrp.CFrame = CFrame.new(hrp.Position, tHrp.Position)
+                    -- TELEPORT
+                    hrp.CFrame = CFrame.new(behindPos, tHrp.Position)
                     
                     -- Update status
                     local statusText = gui.Main:FindFirstChild("StatusText", true)
@@ -447,6 +405,6 @@ end)
 
 -- Init
 local main = createGUI()
-gui.Main = main
+gui = {Main = main}
 updatePlayerList()
-notify("👁️ Script loaded! F5 to open GUI")
+notify("👁️ Script loaded! F5 to open")
