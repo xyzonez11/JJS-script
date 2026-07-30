@@ -1,300 +1,798 @@
---[[
-    Script: JJS Hub - Follow Player
-    Description: A hub with GUI on the left side, toggle with F5.
-]]
+// ==UserScript==
+// @name Jujutsu Shenanigans Auto Chase (Manual Attack)
+// @description Tự động bám sát sau lưng mục tiêu, đánh và skill thủ công
+// @grant none
+// ==/UserScript==
 
--- Services
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
+(function() {
+    'use strict';
 
--- Variables
-local player = Players.LocalPlayer
-local character = player.Character
-local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    // Biến toàn cục
+    let isActive = false;
+    let targetPlayer = null;
+    let guiElement = null;
+    let dragState = {
+        isDragging: false,
+        startX: 0,
+        startY: 0,
+        offsetX: 0,
+        offsetY: 0
+    };
 
-local selectedPlayer = nil
-local isFollowing = false
-local followConnection = nil
-local isHubOpen = false
+    // Style CSS cho GUI
+    const styles = `
+        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap');
+        
+        .jjs-auto-gui * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Quicksand', 'Segoe UI', sans-serif;
+        }
+        
+        .jjs-auto-gui {
+            position: fixed;
+            top: 50px;
+            right: 50px;
+            z-index: 999999;
+            min-width: 350px;
+            background: linear-gradient(135deg, rgba(20, 20, 30, 0.97), rgba(30, 30, 45, 0.97));
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 
+                        0 0 0 1px rgba(255, 255, 255, 0.1),
+                        0 0 30px rgba(138, 43, 226, 0.3);
+            overflow: hidden;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(138, 43, 226, 0.3);
+        }
+        
+        .gui-header {
+            padding: 16px 20px;
+            background: linear-gradient(135deg, rgba(138, 43, 226, 0.3), rgba(75, 0, 130, 0.2));
+            border-bottom: 1px solid rgba(138, 43, 226, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: grab;
+            user-select: none;
+            -webkit-user-select: none;
+            position: relative;
+        }
+        
+        .gui-header:active {
+            cursor: grabbing;
+        }
+        
+        .gui-header::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(138, 43, 226, 0.5), transparent);
+        }
+        
+        .gui-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #fff;
+            text-shadow: 0 2px 10px rgba(138, 43, 226, 0.7);
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .gui-title-icon {
+            font-size: 22px;
+            filter: drop-shadow(0 0 10px rgba(138, 43, 226, 0.7));
+        }
+        
+        .close-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 100, 100, 0.3);
+            background: rgba(255, 100, 100, 0.2);
+            color: #ff6b6b;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .close-btn:hover {
+            background: rgba(255, 100, 100, 0.5);
+            border-color: rgba(255, 100, 100, 0.6);
+            transform: rotate(90deg);
+            box-shadow: 0 0 15px rgba(255, 100, 100, 0.4);
+        }
+        
+        .gui-body {
+            padding: 20px;
+        }
+        
+        .section-label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: rgba(180, 180, 255, 0.8);
+            margin-bottom: 8px;
+        }
+        
+        .player-list-container {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            border: 1px solid rgba(138, 43, 226, 0.2);
+            overflow: hidden;
+            margin-bottom: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(138, 43, 226, 0.5) transparent;
+        }
+        
+        .player-list-container::-webkit-scrollbar {
+            width: 4px;
+        }
+        
+        .player-list-container::-webkit-scrollbar-thumb {
+            background: rgba(138, 43, 226, 0.5);
+            border-radius: 10px;
+        }
+        
+        .player-item {
+            padding: 12px 16px;
+            margin: 0;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 13px;
+            font-weight: 500;
+        }
+        
+        .player-item:last-child {
+            border-bottom: none;
+        }
+        
+        .player-item:hover {
+            background: rgba(138, 43, 226, 0.2);
+            color: white;
+        }
+        
+        .player-item.selected {
+            background: rgba(138, 43, 226, 0.4);
+            color: white;
+            border-left: 3px solid #8e44ad;
+            box-shadow: 0 0 15px rgba(138, 43, 226, 0.3);
+        }
+        
+        .player-name {
+            flex: 1;
+        }
+        
+        .player-check {
+            opacity: 0;
+            transition: all 0.2s ease;
+            color: #2ed573;
+            font-weight: bold;
+        }
+        
+        .player-item.selected .player-check {
+            opacity: 1;
+        }
+        
+        .empty-list {
+            padding: 20px;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 12px;
+        }
+        
+        .refresh-btn {
+            width: 100%;
+            padding: 8px;
+            margin-top: 8px;
+            background: rgba(138, 43, 226, 0.2);
+            border: 1px solid rgba(138, 43, 226, 0.3);
+            border-radius: 8px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+        
+        .refresh-btn:hover {
+            background: rgba(138, 43, 226, 0.4);
+            color: white;
+        }
+        
+        .selected-info {
+            padding: 12px;
+            background: rgba(138, 43, 226, 0.15);
+            border-radius: 10px;
+            border: 1px solid rgba(138, 43, 226, 0.2);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .selected-info .label {
+            font-size: 11px;
+            color: rgba(180, 180, 255, 0.6);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .selected-info .value {
+            font-size: 14px;
+            color: white;
+            font-weight: 600;
+            flex: 1;
+        }
+        
+        .status-section {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 15px;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff4757;
+            box-shadow: 0 0 10px rgba(255, 71, 87, 0.5);
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+        
+        .status-dot.active {
+            background: #2ed573;
+            box-shadow: 0 0 15px rgba(46, 213, 115, 0.7);
+            animation: jjsGlow 1.5s infinite;
+        }
+        
+        @keyframes jjsGlow {
+            0%, 100% { box-shadow: 0 0 10px rgba(46, 213, 115, 0.5); }
+            50% { box-shadow: 0 0 25px rgba(46, 213, 115, 0.9); }
+        }
+        
+        .status-text {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.8);
+            font-weight: 500;
+            flex: 1;
+        }
+        
+        .toggle-btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            position: relative;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        
+        .toggle-btn::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+            transform: rotate(45deg);
+            transition: all 0.5s ease;
+        }
+        
+        .toggle-btn:hover::after {
+            left: 50%;
+        }
+        
+        .toggle-btn.off {
+            background: linear-gradient(135deg, #6c3483, #8e44ad);
+            color: white;
+            box-shadow: 0 5px 20px rgba(138, 43, 226, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .toggle-btn.on {
+            background: linear-gradient(135deg, #2ed573, #8e44ad);
+            color: white;
+            box-shadow: 0 5px 20px rgba(46, 213, 115, 0.4);
+            animation: buttonGlow 2s infinite;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        @keyframes buttonGlow {
+            0%, 100% { box-shadow: 0 5px 20px rgba(46, 213, 115, 0.4); }
+            50% { box-shadow: 0 5px 30px rgba(46, 213, 115, 0.7), 0 0 40px rgba(138, 43, 226, 0.3); }
+        }
+        
+        .toggle-btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .toggle-btn:active {
+            transform: translateY(0);
+        }
+        
+        .toggle-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .info-text {
+            margin-top: 12px;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.4);
+            text-align: center;
+            font-weight: 500;
+        }
+    `;
 
--- UI Elements
-local screenGui = nil
-local mainFrame = nil
-local featuresFrame = nil
-local playerDropdown = nil
-local toggleButton = nil
+    // Inject styles
+    function injectStyles() {
+        const styleElement = document.createElement('style');
+        styleElement.textContent = styles;
+        document.head.appendChild(styleElement);
+    }
 
--- Function to create the GUI
-local function createGUI()
-    -- Create ScreenGui
-    screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "JJS_Hub"
-    screenGui.Parent = player.PlayerGui
-    screenGui.Enabled = false -- Start closed
+    // Tạo GUI
+    function createGUI() {
+        guiElement = document.createElement('div');
+        guiElement.className = 'jjs-auto-gui';
+        guiElement.innerHTML = `
+            <div class="gui-header" id="gui-drag-handle">
+                <div class="gui-title">
+                    <span class="gui-title-icon">👁️</span>
+                    Six Eyes Chase
+                </div>
+                <button class="close-btn" id="gui-close-btn">✕</button>
+            </div>
+            <div class="gui-body">
+                <div class="selected-info">
+                    <span class="label">🎯 Mục tiêu:</span>
+                    <span class="value" id="selected-target-display">Chưa chọn</span>
+                </div>
+                
+                <label class="section-label">📋 Danh sách người chơi</label>
+                <div class="player-list-container" id="player-list">
+                    <div class="empty-list">Đang tải danh sách...</div>
+                </div>
+                
+                <button class="refresh-btn" id="refresh-players-btn">
+                    🔄 Làm mới danh sách
+                </button>
+                
+                <div class="status-section" style="margin-top: 15px;">
+                    <div class="status-dot" id="status-dot"></div>
+                    <span class="status-text" id="status-text">Chưa kích hoạt</span>
+                </div>
+                
+                <button class="toggle-btn off" id="toggle-btn" disabled>
+                    ▶ KÍCH HOẠT
+                </button>
+                
+                <div class="info-text">
+                    F5 để mở/đóng | Kéo thả để di chuyển | Đánh & Skill thủ công
+                </div>
+            </div>
+        `;
 
-    -- Main Frame (Hub) - Left side
-    mainFrame = Instance.new("Frame")
-    mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(0, 250, 1, 0) -- Full height, 250 width
-    mainFrame.Position = UDim2.new(0, 0, 0, 0) -- Left side
-    mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    mainFrame.BackgroundTransparency = 0.05
-    mainFrame.BorderSizePixel = 0
-    mainFrame.ClipsDescendants = true
-    mainFrame.Parent = screenGui
+        document.body.appendChild(guiElement);
+        setupEventListeners();
+        setupDragFunctionality();
+        updatePlayerList();
+        
+        // Auto refresh mỗi 5 giây
+        setInterval(() => {
+            if (guiElement.style.display !== 'none') {
+                updatePlayerList();
+            }
+        }, 5000);
+    }
 
-    -- Top bar (Title + Close button)
-    local topBar = Instance.new("Frame")
-    topBar.Name = "TopBar"
-    topBar.Size = UDim2.new(1, 0, 0, 45)
-    topBar.Position = UDim2.new(0, 0, 0, 0)
-    topBar.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-    topBar.BorderSizePixel = 0
-    topBar.Parent = mainFrame
+    // Kéo thả GUI
+    function setupDragFunctionality() {
+        const header = document.getElementById('gui-drag-handle');
+        
+        header.addEventListener('mousedown', (e) => {
+            if (e.target.tagName === 'BUTTON') return;
+            
+            dragState.isDragging = true;
+            const rect = guiElement.getBoundingClientRect();
+            dragState.offsetX = e.clientX - rect.left;
+            dragState.offsetY = e.clientY - rect.top;
+            
+            guiElement.style.transition = 'none';
+            e.preventDefault();
+        });
 
-    -- Title
-    local title = Instance.new("TextLabel")
-    title.Name = "Title"
-    title.Size = UDim2.new(1, -40, 1, 0)
-    title.Position = UDim2.new(0, 5, 0, 0)
-    title.BackgroundTransparency = 1
-    title.Text = "JJS HUB"
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.TextSize = 20
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Font = Enum.Font.GothamBold
-    title.Parent = topBar
+        document.addEventListener('mousemove', (e) => {
+            if (!dragState.isDragging) return;
+            
+            const newX = e.clientX - dragState.offsetX;
+            const newY = e.clientY - dragState.offsetY;
+            
+            const maxX = window.innerWidth - guiElement.offsetWidth;
+            const maxY = window.innerHeight - guiElement.offsetHeight;
+            
+            guiElement.style.right = 'auto';
+            guiElement.style.top = 'auto';
+            guiElement.style.left = Math.max(0, Math.min(newX, maxX)) + 'px';
+            guiElement.style.top = Math.max(0, Math.min(newY, maxY)) + 'px';
+        });
 
-    -- Close Button (X)
-    local closeButton = Instance.new("TextButton")
-    closeButton.Name = "CloseButton"
-    closeButton.Size = UDim2.new(0, 35, 1, 0)
-    closeButton.Position = UDim2.new(1, -35, 0, 0)
-    closeButton.BackgroundTransparency = 1
-    closeButton.Text = "✕"
-    closeButton.TextColor3 = Color3.fromRGB(255, 100, 100)
-    closeButton.TextSize = 22
-    closeButton.Font = Enum.Font.GothamBold
-    closeButton.Parent = topBar
-    closeButton.MouseButton1Click:Connect(function()
-        isHubOpen = false
-        screenGui.Enabled = false
-    end)
+        document.addEventListener('mouseup', () => {
+            if (dragState.isDragging) {
+                dragState.isDragging = false;
+                guiElement.style.transition = 'all 0.3s ease';
+            }
+        });
+    }
 
-    -- Features Container (ScrollingFrame for future features)
-    featuresFrame = Instance.new("ScrollingFrame")
-    featuresFrame.Name = "FeaturesFrame"
-    featuresFrame.Size = UDim2.new(1, -20, 1, -55)
-    featuresFrame.Position = UDim2.new(0, 10, 0, 50)
-    featuresFrame.BackgroundTransparency = 1
-    featuresFrame.BorderSizePixel = 0
-    featuresFrame.ScrollBarThickness = 4
-    featuresFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-    featuresFrame.Parent = mainFrame
+    // Event listeners
+    function setupEventListeners() {
+        // Nút đóng
+        document.getElementById('gui-close-btn').addEventListener('click', () => {
+            guiElement.style.display = 'none';
+        });
 
-    -- Feature 1: Follow Player
-    local feature1Frame = Instance.new("Frame")
-    feature1Frame.Name = "Feature1"
-    feature1Frame.Size = UDim2.new(1, 0, 0, 120)
-    feature1Frame.Position = UDim2.new(0, 0, 0, 0)
-    feature1Frame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-    feature1Frame.BackgroundTransparency = 0.3
-    feature1Frame.BorderSizePixel = 0
-    feature1Frame.Parent = featuresFrame
+        // Nút toggle ON/OFF
+        document.getElementById('toggle-btn').addEventListener('click', toggleAutoChase);
+        
+        // Nút refresh
+        document.getElementById('refresh-players-btn').addEventListener('click', updatePlayerList);
 
-    -- Feature Title
-    local featureTitle = Instance.new("TextLabel")
-    featureTitle.Name = "FeatureTitle"
-    featureTitle.Size = UDim2.new(1, -10, 0, 25)
-    featureTitle.Position = UDim2.new(0, 5, 0, 5)
-    featureTitle.BackgroundTransparency = 1
-    featureTitle.Text = "📌 Follow Player"
-    featureTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    featureTitle.TextSize = 16
-    featureTitle.TextXAlignment = Enum.TextXAlignment.Left
-    featureTitle.Font = Enum.Font.GothamBold
-    featureTitle.Parent = feature1Frame
+        // Phím tắt F5
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'F5') {
+                e.preventDefault();
+                if (guiElement.style.display === 'none') {
+                    guiElement.style.display = 'block';
+                    updatePlayerList();
+                } else {
+                    guiElement.style.display = 'none';
+                }
+            }
+        });
+    }
 
-    -- Player Dropdown Label
-    local dropdownLabel = Instance.new("TextLabel")
-    dropdownLabel.Name = "DropdownLabel"
-    dropdownLabel.Size = UDim2.new(0, 80, 0, 25)
-    dropdownLabel.Position = UDim2.new(0, 5, 0, 35)
-    dropdownLabel.BackgroundTransparency = 1
-    dropdownLabel.Text = "Player:"
-    dropdownLabel.TextColor3 = Color3.fromRGB(180, 180, 200)
-    dropdownLabel.TextSize = 14
-    dropdownLabel.TextXAlignment = Enum.TextXAlignment.Left
-    dropdownLabel.Font = Enum.Font.Gotham
-    dropdownLabel.Parent = feature1Frame
+    // Lấy danh sách players
+    function getAllPlayers() {
+        try {
+            const players = game.Players.GetPlayers();
+            const localPlayer = game.Players.LocalPlayer;
+            return players
+                .filter(p => p !== localPlayer)
+                .map(p => ({
+                    name: p.Name,
+                    displayName: p.DisplayName || p.Name,
+                    player: p
+                }));
+        } catch (e) {
+            console.error('Lỗi lấy danh sách players:', e);
+            return [];
+        }
+    }
 
-    -- Player Dropdown (ScrollingFrame)
-    local dropdownFrame = Instance.new("ScrollingFrame")
-    dropdownFrame.Name = "DropdownFrame"
-    dropdownFrame.Size = UDim2.new(0, 140, 0, 45)
-    dropdownFrame.Position = UDim2.new(0, 90, 0, 35)
-    dropdownFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
-    dropdownFrame.BorderSizePixel = 0
-    dropdownFrame.ScrollBarThickness = 4
-    dropdownFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-    dropdownFrame.Parent = feature1Frame
+    // Cập nhật danh sách player
+    function updatePlayerList() {
+        const listContainer = document.getElementById('player-list');
+        const players = getAllPlayers();
+        const currentTarget = document.getElementById('selected-target-display').textContent;
+        
+        listContainer.innerHTML = '';
+        
+        if (players.length === 0) {
+            listContainer.innerHTML = '<div class="empty-list">Không có người chơi nào khác</div>';
+            return;
+        }
+        
+        players.forEach(({name, displayName}) => {
+            const item = document.createElement('div');
+            item.className = 'player-item';
+            item.innerHTML = `
+                <span class="player-name">${displayName}</span>
+                <span class="player-check">✓</span>
+            `;
+            
+            // Highlight player đang được chọn
+            if (name === currentTarget) {
+                item.classList.add('selected');
+            }
+            
+            item.addEventListener('click', () => {
+                selectPlayer(name, displayName);
+            });
+            
+            listContainer.appendChild(item);
+        });
+    }
 
-    -- Populate dropdown with players
-    local function updateDropdown()
-        -- Clear existing buttons
-        for _, child in ipairs(dropdownFrame:GetChildren()) do
-            if child:IsA("TextButton") then
-                child:Destroy()
-            end
-        end
+    // Chọn player
+    function selectPlayer(name, displayName) {
+        // Update display
+        document.getElementById('selected-target-display').textContent = name;
+        
+        // Update danh sách highlight
+        document.querySelectorAll('.player-item').forEach(item => {
+            item.classList.remove('selected');
+            if (item.querySelector('.player-name').textContent === displayName) {
+                item.classList.add('selected');
+            }
+        });
+        
+        // Enable nút toggle
+        document.getElementById('toggle-btn').disabled = false;
+        
+        // Nếu đang chạy, cập nhật target mới
+        if (isActive) {
+            const targetPlayerObj = game.Players.FindFirstChild(name);
+            if (targetPlayerObj && targetPlayerObj.Character) {
+                targetPlayer = targetPlayerObj;
+                showNotification(`Đã chuyển mục tiêu sang: ${displayName}`);
+            } else {
+                showNotification('Người chơi chưa spawn hoặc đã thoát!');
+            }
+        }
+    }
 
-        local players = Players:GetPlayers()
-        local yOffset = 0
-        for _, plr in ipairs(players) do
-            if plr ~= player then
-                local btn = Instance.new("TextButton")
-                btn.Name = plr.Name
-                btn.Size = UDim2.new(1, 0, 0, 22)
-                btn.Position = UDim2.new(0, 0, 0, yOffset)
-                btn.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
-                btn.BorderSizePixel = 0
-                btn.Text = plr.Name
-                btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-                btn.TextSize = 12
-                btn.Font = Enum.Font.Gotham
-                btn.Parent = dropdownFrame
+    // Toggle auto chase
+    function toggleAutoChase() {
+        const btn = document.getElementById('toggle-btn');
+        const dot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const targetName = document.getElementById('selected-target-display').textContent;
 
-                btn.MouseButton1Click:Connect(function()
-                    selectedPlayer = plr
-                    -- Highlight selected
-                    for _, child in ipairs(dropdownFrame:GetChildren()) do
-                        if child:IsA("TextButton") then
-                            child.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
-                        end
-                    end
-                    btn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
-                end)
+        if (!isActive) {
+            if (targetName === 'Chưa chọn') {
+                showNotification('Vui lòng chọn mục tiêu từ danh sách!');
+                return;
+            }
 
-                yOffset = yOffset + 25
-            end
-        end
-        dropdownFrame.CanvasSize = UDim2.new(0, 0, 0, yOffset + 5)
-    end
+            // Tìm player
+            const targetPlayerObj = game.Players.FindFirstChild(targetName);
+            if (!targetPlayerObj) {
+                showNotification('Không tìm thấy người chơi này!');
+                return;
+            }
+            
+            if (!targetPlayerObj.Character) {
+                showNotification('Người chơi chưa spawn! Đợi họ spawn rồi thử lại.');
+                return;
+            }
 
-    updateDropdown()
+            targetPlayer = targetPlayerObj;
+            isActive = true;
+            
+            btn.textContent = '⏸ TẮT';
+            btn.className = 'toggle-btn on';
+            dot.className = 'status-dot active';
+            statusText.textContent = `Đang bám sát: ${targetPlayer.DisplayName || targetPlayer.Name}`;
+            
+            showNotification(`Bắt đầu bám sát ${targetPlayer.DisplayName || targetPlayer.Name}! Đánh và skill thủ công.`);
+            startChaseLoop();
+        } else {
+            isActive = false;
+            targetPlayer = null;
+            
+            btn.textContent = '▶ KÍCH HOẠT';
+            btn.className = 'toggle-btn off';
+            dot.className = 'status-dot';
+            statusText.textContent = 'Đã dừng';
+            
+            showNotification('Đã dừng bám sát!');
+        }
+    }
 
-    -- Toggle Button (On/Off)
-    toggleButton = Instance.new("TextButton")
-    toggleButton.Name = "ToggleButton"
-    toggleButton.Size = UDim2.new(0, 60, 0, 30)
-    toggleButton.Position = UDim2.new(0, 5, 0, 85)
-    toggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
-    toggleButton.BorderSizePixel = 0
-    toggleButton.Text = "OFF"
-    toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    toggleButton.TextSize = 14
-    toggleButton.Font = Enum.Font.GothamBold
-    toggleButton.Parent = feature1Frame
+    // Main chase loop - CHỈ di chuyển, KHÔNG đánh
+    function startChaseLoop() {
+        if (!isActive || !targetPlayer) return;
 
-    toggleButton.MouseButton1Click:Connect(function()
-        if isFollowing then
-            -- Turn off
-            isFollowing = false
-            toggleButton.Text = "OFF"
-            toggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
-            if followConnection then
-                followConnection:Disconnect()
-                followConnection = nil
-            end
-        else
-            -- Turn on
-            if selectedPlayer then
-                isFollowing = true
-                toggleButton.Text = "ON"
-                toggleButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-                -- Start following
-                if followConnection then
-                    followConnection:Disconnect()
-                end
-                followConnection = RunService.Heartbeat:Connect(function()
-                    local targetChar = selectedPlayer.Character
-                    if targetChar and targetChar:FindFirstChild("HumanoidRootPart") then
-                        local targetRoot = targetChar.HumanoidRootPart
-                        local character = player.Character
-                        if character and character:FindFirstChild("HumanoidRootPart") then
-                            local root = character.HumanoidRootPart
-                            local targetCFrame = targetRoot.CFrame
-                            local behindPosition = targetCFrame.Position - (targetCFrame.LookVector * 5) + Vector3.new(0, 2, 0)
-                            root.CFrame = CFrame.new(behindPosition, targetCFrame.Position)
-                        end
-                    end
-                end)
-            else
-                -- No player selected
-                toggleButton.Text = "No Player!"
-                toggleButton.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
-                task.wait(1)
-                toggleButton.Text = "OFF"
-                toggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
-            end
-        end
-    end)
+        try {
+            const localPlayer = game.Players.LocalPlayer;
+            const character = localPlayer.Character;
+            const targetCharacter = targetPlayer.Character;
 
-    -- Update dropdown when players join/leave
-    Players.PlayerAdded:Connect(updateDropdown)
-    Players.PlayerRemoving:Connect(updateDropdown)
+            if (!character || !targetCharacter) {
+                if (!targetCharacter) {
+                    statusText.textContent = 'Mục tiêu đã thoát hoặc chưa spawn!';
+                    // Đợi target respawn
+                    waitForTargetRespawn();
+                    return;
+                }
+                return;
+            }
 
-    -- Update canvas size for features frame
-    featuresFrame.CanvasSize = UDim2.new(0, 0, 0, 130) -- Add more height for future features
+            const humanoid = character.FindFirstChildOfClass('Humanoid');
+            const targetHumanoid = targetCharacter.FindFirstChildOfClass('Humanoid');
+            const humanoidRootPart = character.FindFirstChild('HumanoidRootPart');
+            const targetRootPart = targetCharacter.FindFirstChild('HumanoidRootPart');
 
-    return screenGui
-end
+            if (!humanoid || !targetHumanoid || !humanoidRootPart || !targetRootPart) return;
 
--- Toggle hub with F5
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.F5 then
-        if screenGui then
-            isHubOpen = not isHubOpen
-            screenGui.Enabled = isHubOpen
-        else
-            createGUI()
-            isHubOpen = true
-            screenGui.Enabled = true
-        end
-    end
-end)
+            // Kiểm tra health
+            if (humanoid.Health <= 0) {
+                document.getElementById('status-text').textContent = 'Bạn đã chết! Đợi respawn...';
+                waitForRespawn();
+                return;
+            }
 
--- Create GUI initially but keep it closed
-createGUI()
+            if (targetHumanoid.Health <= 0) {
+                document.getElementById('status-text').textContent = 'Mục tiêu đã chết! Đợi respawn...';
+                waitForTargetRespawn();
+                return;
+            }
 
--- Print instructions
-print("JJS Hub loaded!")
-print("Press F5 to open/close the hub.")
-print("Select a player from the dropdown, then click the toggle button to fly behind them.")
+            // Tính toán vị trí đứng sau lưng target
+            const distance = 5; // Khoảng cách 5 studs
+            const lookVector = targetRootPart.CFrame.LookVector;
+            
+            const behindPosition = new Vector3(
+                targetRootPart.Position.X - lookVector.X * distance,
+                targetRootPart.Position.Y,
+                targetRootPart.Position.Z - lookVector.Z * distance
+            );
 
--- Cleanup function
-local function cleanup()
-    if followConnection then
-        followConnection:Disconnect()
-        followConnection = nil
-    end
-    if screenGui then
-        screenGui:Destroy()
-        screenGui = nil
-    end
-end
+            // Di chuyển ra sau target
+            humanoid:MoveTo(behindPosition);
+            
+            // Xoay mặt nhìn vào target
+            humanoidRootPart.CFrame = CFrame.new(
+                humanoidRootPart.Position,
+                targetRootPart.Position
+            );
 
--- Handle player respawn
-player.CharacterAdded:Connect(function(newChar)
-    character = newChar
-    rootPart = character and character:FindFirstChild("HumanoidRootPart")
-end)
+            // Cập nhật status
+            const dist = Math.floor((humanoidRootPart.Position - targetRootPart.Position).Magnitude);
+            document.getElementById('status-text').textContent = 
+                `Đang bám sát: ${targetPlayer.DisplayName || targetPlayer.Name} (${dist}m)`;
 
--- If character is nil, wait for it
-if not character then
-    player.CharacterAdded:Wait()
-    character = player.Character
-    rootPart = character and character:FindFirstChild("HumanoidRootPart")
-end
+        } catch (e) {
+            console.error('Lỗi trong chase loop:', e);
+        }
+
+        // Lặp lại
+        if (isActive) {
+            requestAnimationFrame(startChaseLoop);
+        }
+    }
+
+    // Chờ target respawn
+    function waitForTargetRespawn() {
+        if (!targetPlayer || !isActive) return;
+        
+        const checkInterval = setInterval(() => {
+            if (!isActive || !targetPlayer) {
+                clearInterval(checkInterval);
+                return;
+            }
+            
+            const targetCharacter = targetPlayer.Character;
+            if (targetCharacter && targetCharacter.FindFirstChildOfClass('Humanoid') && 
+                targetCharacter.FindFirstChildOfClass('Humanoid').Health > 0) {
+                clearInterval(checkInterval);
+                document.getElementById('status-text').textContent = 
+                    `Đang bám sát: ${targetPlayer.DisplayName || targetPlayer.Name}`;
+                showNotification('Mục tiêu đã respawn! Tiếp tục bám sát.');
+            }
+        }, 1000);
+    }
+
+    // Chờ bản thân respawn
+    function waitForRespawn() {
+        const localPlayer = game.Players.LocalPlayer;
+        
+        const checkInterval = setInterval(() => {
+            if (!isActive) {
+                clearInterval(checkInterval);
+                return;
+            }
+            
+            const character = localPlayer.Character;
+            if (character && character.FindFirstChildOfClass('Humanoid') && 
+                character.FindFirstChildOfClass('Humanoid').Health > 0) {
+                clearInterval(checkInterval);
+                document.getElementById('status-text').textContent = 
+                    `Đang bám sát: ${targetPlayer.DisplayName || targetPlayer.Name}`;
+                showNotification('Đã respawn! Tiếp tục bám sát.');
+            }
+        }, 1000);
+    }
+
+    // Hiển thị thông báo
+    function showNotification(message) {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(138, 43, 226, 0.95);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-family: 'Quicksand', sans-serif;
+            font-weight: 600;
+            font-size: 14px;
+            z-index: 9999999;
+            box-shadow: 0 10px 30px rgba(138, 43, 226, 0.5);
+            animation: slideDown 0.3s ease, fadeOut 0.3s ease 1.7s forwards;
+            pointer-events: none;
+        `;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 2000);
+    }
+
+    // Thêm animation styles
+    function addAnimationStyles() {
+        const animStyles = document.createElement('style');
+        animStyles.textContent = `
+            @keyframes slideDown {
+                from { transform: translateX(-50%) translateY(-100px); opacity: 0; }
+                to { transform: translateX(-50%) translateY(0); opacity: 1; }
+            }
+            @keyframes fadeOut {
+                from { opacity: 1; }
+                to { opacity: 0; }
+            }
+        `;
+        document.head.appendChild(animStyles);
+    }
+
+    // Khởi tạo
+    async function init() {
+        injectStyles();
+        addAnimationStyles();
+        await waitForGame();
+        createGUI();
+        console.log('Jujutsu Shenanigans Auto Chase đã sẵn sàng!');
+        console.log('- F5: Mở/đóng GUI');
+        console.log('- Chọn mục tiêu từ danh sách');
+        console.log('- Nhấn KÍCH HOẠT để bắt đầu bám sát');
+        console.log('- Đánh và skill là THỦ CÔNG (bạn tự bấm)');
+    }
+
+    // Chạy
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+
+})();
