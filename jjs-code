@@ -1,5 +1,5 @@
 --[[
-    Script: JJS Hub - Follow Player (FIXED - Simple)
+    Script: JJS Hub - Follow Player
     Description: A hub with GUI on the left side, toggle with F5.
 ]]
 
@@ -218,29 +218,15 @@ local function createGUI()
                     followConnection:Disconnect()
                 end
                 followConnection = RunService.Heartbeat:Connect(function()
-                    if not isFollowing then return end
-                    
                     local targetChar = selectedPlayer.Character
                     if targetChar and targetChar:FindFirstChild("HumanoidRootPart") then
                         local targetRoot = targetChar.HumanoidRootPart
                         local character = player.Character
                         if character and character:FindFirstChild("HumanoidRootPart") then
                             local root = character.HumanoidRootPart
-                            local humanoid = character:FindFirstChildOfClass("Humanoid")
-                            
                             local targetCFrame = targetRoot.CFrame
-                            -- Khoảng cách 2.5 để đánh được
-                            local behindPosition = targetCFrame.Position - (targetCFrame.LookVector * 2.5) + Vector3.new(0, 1.5, 0)
-                            
-                            -- Set CFrame
+                            local behindPosition = targetCFrame.Position - (targetCFrame.LookVector * 5) + Vector3.new(0, 2, 0)
                             root.CFrame = CFrame.new(behindPosition, targetCFrame.Position)
-                            
-                            -- QUAN TRỌNG: Force sync với server
-                            if humanoid then
-                                humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-                                -- Hoặc dùng Jump để force update
-                                -- humanoid.Jump = true
-                            end
                         end
                     end
                 end)
