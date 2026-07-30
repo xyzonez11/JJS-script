@@ -6,7 +6,6 @@
     
     Phím tắt:
         F5  → Mở/đóng Hub
-        F6  → Bật/tắt Follow nhanh
 ]]
 
 -- ═══════════════════════════════════════════════
@@ -41,10 +40,9 @@ local C = {
     bg         = Color3.fromRGB(15,  15,  22),
     panel      = Color3.fromRGB(22,  22,  35),
     card       = Color3.fromRGB(28,  28,  44),
-    accent     = Color3.fromRGB( 99, 102, 241),   -- indigo
+    accent     = Color3.fromRGB( 99, 102, 241),
     accentHov  = Color3.fromRGB(129, 132, 255),
     danger     = Color3.fromRGB(239,  68,  68),
-    dangerHov  = Color3.fromRGB(252, 100, 100),
     success    = Color3.fromRGB( 34, 197,  94),
     warn       = Color3.fromRGB(234, 179,   8),
     textPrim   = Color3.fromRGB(240, 240, 255),
@@ -128,7 +126,6 @@ topBar.ZIndex         = 2
 topBar.Parent         = main
 corner(topBar, 12)
 
--- bottom corners square (visually)
 local sq = Instance.new("Frame")
 sq.Size            = UDim2.new(1, 0, 0, 12)
 sq.Position        = UDim2.new(0, 0, 1, -12)
@@ -137,7 +134,6 @@ sq.BorderSizePixel = 0
 sq.ZIndex          = 2
 sq.Parent          = topBar
 
--- accent strip on top edge
 local accentBar = Instance.new("Frame")
 accentBar.Size            = UDim2.new(0, 60, 0, 3)
 accentBar.Position        = UDim2.new(0, 16, 0, 0)
@@ -147,7 +143,6 @@ accentBar.ZIndex           = 3
 accentBar.Parent           = topBar
 corner(accentBar, 2)
 
--- Title
 local titleL = Instance.new("TextLabel")
 titleL.Size               = UDim2.new(1, -90, 1, 0)
 titleL.Position           = UDim2.new(0, 16, 0, 0)
@@ -172,7 +167,6 @@ subL.TextXAlignment     = Enum.TextXAlignment.Left
 subL.ZIndex             = 3
 subL.Parent             = topBar
 
--- Close button
 local closeBtn = Instance.new("TextButton")
 closeBtn.Size             = UDim2.new(0, 32, 0, 32)
 closeBtn.Position         = UDim2.new(1, -42, 0, 7)
@@ -195,7 +189,7 @@ closeBtn.MouseLeave:Connect(function()
 end)
 closeBtn.MouseButton1Click:Connect(function()
     isHubOpen = false
-    tween(screenGui.Main, {Position = UDim2.new(0, -320, 0.5, -210)}, 0.25)
+    tween(main, {Position = UDim2.new(0, -320, 0.5, -210)}, 0.25)
     task.delay(0.25, function() screenGui.Enabled = false end)
 end)
 
@@ -239,7 +233,6 @@ secTarget.BackgroundTransparency = 1
 secTarget.Parent        = content
 label(secTarget, "SELECT TARGET", 11, C.textMuted, true)
 
--- Player list container
 local listBg = Instance.new("Frame")
 listBg.Size             = UDim2.new(1, 0, 0, 160)
 listBg.Position         = UDim2.new(0, 0, 0, 30)
@@ -351,7 +344,6 @@ sliderKnob.Parent           = sliderBg
 corner(sliderKnob, 999)
 stroke(sliderKnob, Color3.fromRGB(180,180,255), 1.5)
 
--- Slider drag
 local sliderDragging = false
 sliderKnob.InputBegan:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton1 then sliderDragging = true end
@@ -364,7 +356,6 @@ UserInputService.InputChanged:Connect(function(i)
         local abs  = sliderBg.AbsolutePosition
         local siz  = sliderBg.AbsoluteSize
         local relX = math.clamp((i.Position.X - abs.X) / siz.X, 0, 1)
-        -- Range 1–10 studs
         FOLLOW_DISTANCE = math.floor(relX * 9 + 1 + 0.5)
         local pct = (FOLLOW_DISTANCE - 1) / 9
         sliderFill.Size     = UDim2.new(pct, 0, 1, 0)
@@ -379,7 +370,7 @@ toggleBtn.Size            = UDim2.new(1, 0, 0, 44)
 toggleBtn.Position        = UDim2.new(0, 0, 0, 336)
 toggleBtn.BackgroundColor3 = C.accent
 toggleBtn.BorderSizePixel  = 0
-toggleBtn.Text             = "▶  BẮTĐẦU FOLLOW"
+toggleBtn.Text             = "▶  BẮT ĐẦU FOLLOW"
 toggleBtn.TextColor3       = Color3.fromRGB(255, 255, 255)
 toggleBtn.TextSize         = 15
 toggleBtn.Font             = Enum.Font.GothamBlack
@@ -393,8 +384,7 @@ toggleBtn.MouseLeave:Connect(function()
     if not isFollowing then tween(toggleBtn, {BackgroundColor3 = C.accent}) end
 end)
 
--- ── Hotkey hint ──────────────────────────────────
-local hint = label(content, "F5 mở/đóng  •  F6 bật/tắt nhanh", 11, C.textMuted)
+local hint = label(content, "F5 để mở / đóng Hub", 11, C.textMuted)
 hint.Size     = UDim2.new(1, 0, 0, 18)
 hint.Position = UDim2.new(0, 0, 0, 384)
 hint.TextXAlignment = Enum.TextXAlignment.Center
@@ -416,8 +406,8 @@ local function updateList()
         if child:IsA("TextButton") then child:Destroy() end
     end
 
-    local plrs    = Players:GetPlayers()
-    local count   = 0
+    local plrs  = Players:GetPlayers()
+    local count = 0
 
     for _, plr in ipairs(plrs) do
         if plr ~= player then
@@ -431,11 +421,8 @@ local function updateList()
             row.AutoButtonColor   = false
             row.Parent            = scroll
             corner(row, 6)
-            if selectedPlayer ~= plr then
-                stroke(row, C.border, 1)
-            end
+            if selectedPlayer ~= plr then stroke(row, C.border, 1) end
 
-            -- Avatar thumbnail (fire and forget)
             local thumb = Instance.new("ImageLabel")
             thumb.Size              = UDim2.new(0, 24, 0, 24)
             thumb.Position          = UDim2.new(0, 6, 0.5, -12)
@@ -449,12 +436,10 @@ local function updateList()
             nameL.Size     = UDim2.new(1, -70, 1, 0)
             nameL.Position = UDim2.new(0, 36, 0, 0)
 
-            -- Ping/display-name sub-label
             local dispL = label(row, "@" .. plr.DisplayName, 11, C.textMuted)
             dispL.Size     = UDim2.new(1, -70, 0, 14)
             dispL.Position = UDim2.new(0, 36, 1, -14)
 
-            -- Selected indicator
             if selectedPlayer == plr then
                 local dot = Instance.new("Frame")
                 dot.Size            = UDim2.new(0, 6, 0, 6)
@@ -471,7 +456,6 @@ local function updateList()
             row.MouseLeave:Connect(function()
                 if selectedPlayer ~= plr then tween(row, {BackgroundColor3 = C.card}) end
             end)
-
             row.MouseButton1Click:Connect(function()
                 selectedPlayer = plr
                 updateList()
@@ -482,22 +466,21 @@ local function updateList()
 
     if count == 0 then
         local noPlr = label(scroll, "Không có người chơi nào khác", 13, C.textMuted)
-        noPlr.Size             = UDim2.new(1, 0, 0, 40)
-        noPlr.TextXAlignment   = Enum.TextXAlignment.Center
+        noPlr.Size           = UDim2.new(1, 0, 0, 40)
+        noPlr.TextXAlignment = Enum.TextXAlignment.Center
     end
 
     scroll.CanvasSize = UDim2.new(0, 0, 0, count * 36 + 8)
 end
 
 -- ═══════════════════════════════════════════════
---  FOLLOW  LOGIC  (FIXED)
+--  FOLLOW LOGIC (FIXED)
 --  ─────────────────────────────────────────────
 --  BUG CŨ: root.CFrame = ... mỗi Heartbeat
 --    → server không nhận đúng vị trí → attack/skill trượt hư không
 --
---  FIX: Dùng Humanoid:MoveTo() → làm việc đúng với physics, 
---       server nhận vị trí chính xác, attack và skill hoạt động bình thường.
---       Chỉ move khi khoảng cách > threshold để không khoá chuyển động.
+--  FIX: myRoot.CFrame (đúng biến) + ChangeState(GettingUp)
+--       sau mỗi teleport để server nhận lại vị trí.
 -- ═══════════════════════════════════════════════
 local function startFollow()
     if followConnection then followConnection:Disconnect() end
@@ -507,7 +490,7 @@ local function startFollow()
 
         local myChar = player.Character
         if not myChar then return end
-        local myRoot    = myChar:FindFirstChild("HumanoidRootPart")
+        local myRoot     = myChar:FindFirstChild("HumanoidRootPart")
         local myHumanoid = myChar:FindFirstChildOfClass("Humanoid")
         if not myRoot or not myHumanoid then return end
         if myHumanoid.Health <= 0 then return end
@@ -517,14 +500,13 @@ local function startFollow()
         local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
         if not targetRoot then return end
 
-        local targetCF       = targetRoot.CFrame
-        local behindPos      = targetCF.Position - (targetCF.LookVector * FOLLOW_DISTANCE)
-        local dist           = (myRoot.Position - behindPos).Magnitude
+        local targetCF  = targetRoot.CFrame
+        local behindPos = targetCF.Position - (targetCF.LookVector * FOLLOW_DISTANCE)
+        local dist      = (myRoot.Position - behindPos).Magnitude
 
-        -- Chỉ move khi xa hơn 1 stud – tránh lock animation khi đứng gần
-        if dist > 1.0 then
-            -- ✅ FIX: MoveTo() thay vì set CFrame
-            myHumanoid:MoveTo(behindPos, targetRoot)
+        if dist > 0.5 then
+            myRoot.CFrame = CFrame.new(behindPos, targetCF.Position)
+            myHumanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
         end
     end)
 end
@@ -536,20 +518,18 @@ local function stopFollow()
     end
     local myChar     = player.Character
     local myHumanoid = myChar and myChar:FindFirstChildOfClass("Humanoid")
-    if myHumanoid then myHumanoid:Move(Vector3.zero) end  -- stop movement
+    if myHumanoid then myHumanoid:Move(Vector3.zero) end
 end
 
--- ── Toggle function ──────────────────────────────
+-- ── Toggle ───────────────────────────────────────
 local function toggleFollow()
     if isFollowing then
-        -- Turn OFF
         isFollowing = false
         stopFollow()
         tween(toggleBtn, {BackgroundColor3 = C.accent})
         toggleBtn.Text = "▶  BẮT ĐẦU FOLLOW"
         setStatus("Đã dừng follow", C.textSec, C.textMuted)
     else
-        -- Turn ON
         if not selectedPlayer then
             tween(toggleBtn, {BackgroundColor3 = C.warn})
             toggleBtn.Text = "⚠  CHỌN MỤC TIÊU TRƯỚC"
@@ -574,13 +554,12 @@ end
 toggleBtn.MouseButton1Click:Connect(toggleFollow)
 
 -- ═══════════════════════════════════════════════
---  HUB  OPEN / CLOSE
+--  HUB OPEN / CLOSE
 -- ═══════════════════════════════════════════════
 local function openHub()
     screenGui.Enabled = true
     isHubOpen = true
     updateList()
-    -- Slide in
     main.Position = UDim2.new(0, -320, 0.5, -210)
     tween(main, {Position = UDim2.new(0, 18, 0.5, -210)}, 0.28, Enum.EasingStyle.Back)
 end
@@ -598,32 +577,11 @@ UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
     if input.KeyCode == Enum.KeyCode.F5 then
         if isHubOpen then closeHub() else openHub() end
-    elseif input.KeyCode == Enum.KeyCode.F6 then
-        toggleFollow()
-        -- Brief flash notification
-        local notif = Instance.new("ScreenGui")
-        notif.Name   = "JJS_Notif"
-        notif.Parent = player.PlayerGui
-        local nf = Instance.new("Frame")
-        nf.Size             = UDim2.new(0, 220, 0, 36)
-        nf.Position         = UDim2.new(0.5, -110, 0, 16)
-        nf.BackgroundColor3 = isFollowing and C.danger or C.panel
-        nf.BorderSizePixel  = 0
-        nf.Parent           = notif
-        corner(nf, 8)
-        stroke(nf, C.border, 1)
-        local nl = label(nf, isFollowing and "🟢 Follow ON (F6)" or "⚪ Follow OFF (F6)", 13, C.textPrim, true)
-        nl.TextXAlignment = Enum.TextXAlignment.Center
-        tween(nf, {BackgroundTransparency = 0.1}, 0.1)
-        task.delay(1.5, function()
-            tween(nf, {BackgroundTransparency = 1}, 0.3)
-            task.delay(0.35, function() notif:Destroy() end)
-        end)
     end
 end)
 
 -- ═══════════════════════════════════════════════
---  AUTO-UPDATE  LIST  on player join/leave
+--  AUTO-UPDATE LIST
 -- ═══════════════════════════════════════════════
 Players.PlayerAdded:Connect(function()
     if isHubOpen then updateList() end
@@ -664,5 +622,4 @@ openHub()
 
 print("✅ JJS Hub v2.0 (Fixed) loaded!")
 print("   F5 → Mở/đóng Hub")
-print("   F6 → Bật/tắt Follow nhanh")
 print("   FIX: Attack & skill hoạt động bình thường khi đang follow")
