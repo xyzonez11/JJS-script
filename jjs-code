@@ -1,597 +1,452 @@
-// ==UserScript==
-// @name Jujutsu Shenanigans Auto Chase
-// @description Bám sát sau lưng mục tiêu, đánh và skill thủ công
-// @grant none
-// ==/UserScript==
+-- JJK Chase GUI - Solara Executor
+local Player = game.Players.LocalPlayer
+local RunService = game.RunService
+local UserInputService = game.UserInputService
+local TweenService = game.TweenService
 
-(function() {
-    'use strict';
+local isActive = false
+local targetPlayer = nil
+local gui = nil
+local dragging = false
+local dragStart = nil
+local startPos = nil
 
-    let isActive = false;
-    let targetPlayer = null;
-    let guiElement = null;
-    let isDragging = false;
-    let dragOffsetX = 0;
-    let dragOffsetY = 0;
+-- Tạo GUI
+local function createGUI()
+    gui = Instance.new("ScreenGui")
+    gui.Name = "JJKChase"
+    gui.Parent = game.CoreGui
+    gui.ResetOnSpawn = false
+    
+    -- Main
+    local main = Instance.new("Frame")
+    main.Name = "Main"
+    main.Size = UDim2.new(0, 300, 0, 350)
+    main.Position = UDim2.new(0, 100, 0, 100)
+    main.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+    main.BorderSizePixel = 0
+    main.Visible = false
+    main.Parent = gui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = main
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(138, 43, 226)
+    stroke.Thickness = 1.5
+    stroke.Parent = main
+    
+    -- Header
+    local header = Instance.new("Frame")
+    header.Name = "Header"
+    header.Size = UDim2.new(1, 0, 0, 40)
+    header.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+    header.BackgroundTransparency = 0.7
+    header.BorderSizePixel = 0
+    header.Parent = main
+    
+    local hCorner = Instance.new("UICorner")
+    hCorner.CornerRadius = UDim.new(0, 10)
+    hCorner.Parent = header
+    
+    -- Title
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -50, 1, 0)
+    title.Position = UDim2.new(0, 15, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "👁️ Six Eyes Chase"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 14
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = header
+    
+    -- Close btn
+    local close = Instance.new("TextButton")
+    close.Size = UDim2.new(0, 25, 0, 25)
+    close.Position = UDim2.new(1, -35, 0.5, -12)
+    close.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+    close.BackgroundTransparency = 0.6
+    close.Text = "✕"
+    close.TextColor3 = Color3.fromRGB(255, 255, 255)
+    close.Font = Enum.Font.GothamBold
+    close.TextSize = 14
+    close.Parent = header
+    
+    local cCorner = Instance.new("UICorner")
+    cCorner.CornerRadius = UDim.new(1, 0)
+    cCorner.Parent = close
+    
+    close.MouseButton1Click:Connect(function()
+        main.Visible = false
+    end)
+    
+    -- Drag
+    header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = main.Position
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    
+    -- Selected target
+    local selectedFrame = Instance.new("Frame")
+    selectedFrame.Size = UDim2.new(1, -30, 0, 35)
+    selectedFrame.Position = UDim2.new(0, 15, 0, 50)
+    selectedFrame.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+    selectedFrame.BackgroundTransparency = 0.8
+    selectedFrame.BorderSizePixel = 0
+    selectedFrame.Parent = main
+    
+    Instance.new("UICorner", selectedFrame).CornerRadius = UDim.new(0, 6)
+    
+    local selLabel = Instance.new("TextLabel")
+    selLabel.Size = UDim2.new(0, 80, 1, 0)
+    selLabel.Position = UDim2.new(0, 8, 0, 0)
+    selLabel.BackgroundTransparency = 1
+    selLabel.Text = "🎯 Mục tiêu:"
+    selLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    selLabel.Font = Enum.Font.GothamSemibold
+    selLabel.TextSize = 11
+    selLabel.TextXAlignment = Enum.TextXAlignment.Left
+    selLabel.Parent = selectedFrame
+    
+    local selName = Instance.new("TextLabel")
+    selName.Name = "SelectedName"
+    selName.Size = UDim2.new(1, -90, 1, 0)
+    selName.Position = UDim2.new(0, 85, 0, 0)
+    selName.BackgroundTransparency = 1
+    selName.Text = "Chưa chọn"
+    selName.TextColor3 = Color3.fromRGB(255, 255, 255)
+    selName.Font = Enum.Font.GothamBold
+    selName.TextSize = 12
+    selName.TextXAlignment = Enum.TextXAlignment.Left
+    selName.Parent = selectedFrame
+    
+    -- List label
+    local listLabel = Instance.new("TextLabel")
+    listLabel.Size = UDim2.new(1, -30, 0, 18)
+    listLabel.Position = UDim2.new(0, 15, 0, 92)
+    listLabel.BackgroundTransparency = 1
+    listLabel.Text = "📋 Danh sách người chơi"
+    listLabel.TextColor3 = Color3.fromRGB(170, 170, 255)
+    listLabel.Font = Enum.Font.GothamSemibold
+    listLabel.TextSize = 10
+    listLabel.TextXAlignment = Enum.TextXAlignment.Left
+    listLabel.Parent = main
+    
+    -- Player scrolling list
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Name = "PlayerScroll"
+    scroll.Size = UDim2.new(1, -30, 0, 120)
+    scroll.Position = UDim2.new(0, 15, 0, 112)
+    scroll.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    scroll.BackgroundTransparency = 0.7
+    scroll.BorderSizePixel = 0
+    scroll.ScrollBarThickness = 3
+    scroll.ScrollBarImageColor3 = Color3.fromRGB(138, 43, 226)
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scroll.Parent = main
+    
+    Instance.new("UICorner", scroll).CornerRadius = UDim.new(0, 6)
+    
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.Padding = UDim.new(0, 2)
+    listLayout.Parent = scroll
+    
+    -- Refresh button
+    local refreshBtn = Instance.new("TextButton")
+    refreshBtn.Size = UDim2.new(1, -30, 0, 30)
+    refreshBtn.Position = UDim2.new(0, 15, 0, 238)
+    refreshBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+    refreshBtn.BackgroundTransparency = 0.8
+    refreshBtn.Text = "🔄 Làm mới danh sách"
+    refreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    refreshBtn.Font = Enum.Font.GothamSemibold
+    refreshBtn.TextSize = 11
+    refreshBtn.Parent = main
+    
+    Instance.new("UICorner", refreshBtn).CornerRadius = UDim.new(0, 6)
+    
+    refreshBtn.MouseButton1Click:Connect(function()
+        updatePlayerList()
+    end)
+    
+    -- Status
+    local statusFrame = Instance.new("Frame")
+    statusFrame.Size = UDim2.new(1, -30, 0, 35)
+    statusFrame.Position = UDim2.new(0, 15, 0, 275)
+    statusFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    statusFrame.BackgroundTransparency = 0.6
+    statusFrame.BorderSizePixel = 0
+    statusFrame.Parent = main
+    
+    Instance.new("UICorner", statusFrame).CornerRadius = UDim.new(0, 6)
+    
+    local dot = Instance.new("Frame")
+    dot.Name = "StatusDot"
+    dot.Size = UDim2.new(0, 10, 0, 10)
+    dot.Position = UDim2.new(0, 10, 0.5, -5)
+    dot.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+    dot.Parent = statusFrame
+    
+    Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+    
+    local statusText = Instance.new("TextLabel")
+    statusText.Name = "StatusText"
+    statusText.Size = UDim2.new(1, -30, 1, 0)
+    statusText.Position = UDim2.new(0, 25, 0, 0)
+    statusText.BackgroundTransparency = 1
+    statusText.Text = "Chưa kích hoạt"
+    statusText.TextColor3 = Color3.fromRGB(220, 220, 220)
+    statusText.Font = Enum.Font.Gotham
+    statusText.TextSize = 11
+    statusText.TextXAlignment = Enum.TextXAlignment.Left
+    statusText.Parent = statusFrame
+    
+    -- Toggle button
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Name = "ToggleBtn"
+    toggleBtn.Size = UDim2.new(1, -30, 0, 35)
+    toggleBtn.Position = UDim2.new(0, 15, 0, 315)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+    toggleBtn.Text = "▶ KÍCH HOẠT"
+    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextSize = 13
+    toggleBtn.AutoButtonColor = false
+    toggleBtn.Parent = main
+    
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
+    
+    toggleBtn.MouseButton1Click:Connect(function()
+        toggleChase()
+    end)
+    
+    -- Info text
+    local info = Instance.new("TextLabel")
+    info.Size = UDim2.new(1, -30, 0, 15)
+    info.Position = UDim2.new(0, 15, 0, 352)
+    info.BackgroundTransparency = 1
+    info.Text = "F5: Mở/Đóng GUI | Kéo thả để di chuyển"
+    info.TextColor3 = Color3.fromRGB(150, 150, 150)
+    info.Font = Enum.Font.Gotham
+    info.TextSize = 9
+    info.TextXAlignment = Enum.TextXAlignment.Center
+    info.Parent = main
+    
+    return main
+end
 
-    // Chờ game load
-    function waitForGame() {
-        return new Promise((resolve) => {
-            const check = () => {
-                if (typeof game !== 'undefined' && game.Players && game.Players.LocalPlayer) {
-                    resolve();
-                } else {
-                    setTimeout(check, 500);
-                }
-            };
-            check();
-        });
-    }
-
-    // Style CSS
-    const styles = `
-        .jjs-gui * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', sans-serif;
-        }
-        
-        .jjs-gui {
-            position: fixed;
-            top: 50px;
-            right: 50px;
-            z-index: 999999;
-            width: 320px;
-            background: rgba(20, 20, 30, 0.95);
-            backdrop-filter: blur(15px);
-            border-radius: 12px;
-            border: 1px solid rgba(138, 43, 226, 0.4);
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
-            overflow: hidden;
-            display: none;
-        }
-        
-        .jjs-header {
-            padding: 14px 18px;
-            background: rgba(138, 43, 226, 0.3);
-            border-bottom: 1px solid rgba(138, 43, 226, 0.3);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            cursor: grab;
-            user-select: none;
-        }
-        
-        .jjs-header:active {
-            cursor: grabbing;
-        }
-        
-        .jjs-title {
-            font-size: 15px;
-            font-weight: 700;
-            color: #fff;
-            letter-spacing: 0.5px;
-        }
-        
-        .jjs-close {
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            border: none;
-            background: rgba(255, 80, 80, 0.3);
-            color: #ff5050;
-            cursor: pointer;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: 0.2s;
-        }
-        
-        .jjs-close:hover {
-            background: rgba(255, 80, 80, 0.6);
-            transform: rotate(90deg);
-        }
-        
-        .jjs-body {
-            padding: 16px;
-        }
-        
-        .jjs-label {
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: rgba(200, 200, 255, 0.7);
-            margin-bottom: 8px;
-            display: block;
-        }
-        
-        .jjs-selected {
-            padding: 10px 14px;
-            background: rgba(138, 43, 226, 0.2);
-            border-radius: 8px;
-            border: 1px solid rgba(138, 43, 226, 0.3);
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: #fff;
-            font-size: 13px;
-            font-weight: 500;
-        }
-        
-        .jjs-list {
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            max-height: 180px;
-            overflow-y: auto;
-            margin-bottom: 8px;
-        }
-        
-        .jjs-list::-webkit-scrollbar {
-            width: 4px;
-        }
-        
-        .jjs-list::-webkit-scrollbar-thumb {
-            background: rgba(138, 43, 226, 0.5);
-            border-radius: 10px;
-        }
-        
-        .jjs-player {
-            padding: 10px 14px;
-            cursor: pointer;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            color: rgba(255, 255, 255, 0.7);
-            font-size: 13px;
-            transition: 0.2s;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .jjs-player:hover {
-            background: rgba(138, 43, 226, 0.2);
-            color: #fff;
-        }
-        
-        .jjs-player.selected {
-            background: rgba(138, 43, 226, 0.4);
-            color: #fff;
-            border-left: 3px solid #9b59b6;
-        }
-        
-        .jjs-check {
-            color: #2ecc71;
-            font-weight: bold;
-            display: none;
-        }
-        
-        .jjs-player.selected .jjs-check {
-            display: block;
-        }
-        
-        .jjs-refresh {
-            width: 100%;
-            padding: 8px;
-            background: rgba(138, 43, 226, 0.2);
-            border: 1px solid rgba(138, 43, 226, 0.3);
-            border-radius: 6px;
-            color: rgba(255, 255, 255, 0.8);
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
-            margin-bottom: 12px;
-            transition: 0.2s;
-        }
-        
-        .jjs-refresh:hover {
-            background: rgba(138, 43, 226, 0.4);
-        }
-        
-        .jjs-status {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 10px 14px;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 8px;
-            margin-bottom: 12px;
-        }
-        
-        .jjs-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #e74c3c;
-            flex-shrink: 0;
-        }
-        
-        .jjs-dot.active {
-            background: #2ecc71;
-            box-shadow: 0 0 10px rgba(46, 204, 113, 0.7);
-        }
-        
-        .jjs-status-text {
-            font-size: 12px;
-            color: rgba(255, 255, 255, 0.8);
-            flex: 1;
-        }
-        
-        .jjs-toggle {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 700;
-            cursor: pointer;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            transition: 0.2s;
-            color: #fff;
-        }
-        
-        .jjs-toggle.off {
-            background: linear-gradient(135deg, #6c3483, #8e44ad);
-        }
-        
-        .jjs-toggle.on {
-            background: linear-gradient(135deg, #2ecc71, #8e44ad);
-        }
-        
-        .jjs-toggle:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        
-        .jjs-toggle:not(:disabled):hover {
-            transform: translateY(-1px);
-        }
-        
-        .jjs-info {
-            text-align: center;
-            font-size: 11px;
-            color: rgba(255, 255, 255, 0.4);
-            margin-top: 10px;
-        }
-        
-        .jjs-empty {
-            padding: 20px;
-            text-align: center;
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 12px;
-        }
-        
-        .jjs-notif {
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(138, 43, 226, 0.95);
-            color: #fff;
-            padding: 10px 20px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 600;
-            z-index: 9999999;
-            pointer-events: none;
-            animation: jjsSlideDown 0.3s ease, jjsFadeOut 0.3s ease 1.7s forwards;
-        }
-        
-        @keyframes jjsSlideDown {
-            from { transform: translateX(-50%) translateY(-50px); opacity: 0; }
-            to { transform: translateX(-50%) translateY(0); opacity: 1; }
-        }
-        
-        @keyframes jjsFadeOut {
-            from { opacity: 1; }
-            to { opacity: 0; }
-        }
-    `;
-
-    function injectStyles() {
-        const style = document.createElement('style');
-        style.textContent = styles;
-        document.head.appendChild(style);
-    }
-
-    function notify(msg) {
-        const n = document.createElement('div');
-        n.className = 'jjs-notif';
-        n.textContent = msg;
-        document.body.appendChild(n);
-        setTimeout(() => n.remove(), 2000);
-    }
-
-    function getAllPlayers() {
-        try {
-            const all = game.Players.GetPlayers();
-            const local = game.Players.LocalPlayer;
-            return all.filter(p => p !== local).map(p => ({
-                name: p.Name,
-                display: p.DisplayName || p.Name,
-                player: p
-            }));
-        } catch(e) {
-            return [];
-        }
-    }
-
-    function updateList() {
-        const list = document.getElementById('jjs-list');
-        const players = getAllPlayers();
-        const currentTarget = document.getElementById('jjs-selected-name').textContent;
-        
-        list.innerHTML = '';
-        
-        if (players.length === 0) {
-            list.innerHTML = '<div class="jjs-empty">Không có người chơi nào</div>';
-            return;
-        }
-        
-        players.forEach(({name, display}) => {
-            const div = document.createElement('div');
-            div.className = 'jjs-player';
-            div.innerHTML = `<span>${display}</span><span class="jjs-check">✓</span>`;
+-- Update player list
+function updatePlayerList()
+    local scroll = gui.Main.PlayerScroll
+    -- Clear
+    for _, child in pairs(scroll:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+    
+    local players = game.Players:GetPlayers()
+    local selName = gui.Main:FindFirstChild("SelectedName", true)
+    
+    for _, p in pairs(players) do
+        if p ~= Player then
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, 0, 0, 28)
+            btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            btn.BackgroundTransparency = 0.95
+            btn.Text = "  " .. p.DisplayName
+            btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+            btn.Font = Enum.Font.Gotham
+            btn.TextSize = 12
+            btn.TextXAlignment = Enum.TextXAlignment.Left
+            btn.AutoButtonColor = false
+            btn.Parent = scroll
             
-            if (name === currentTarget) {
-                div.classList.add('selected');
-            }
+            if selName and selName.Text == p.Name then
+                btn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+                btn.BackgroundTransparency = 0.5
+                btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            end
             
-            div.addEventListener('click', () => selectPlayer(name, display));
-            list.appendChild(div);
-        });
-    }
+            btn.MouseButton1Click:Connect(function()
+                selectPlayer(p)
+            end)
+        end
+    end
+    
+    scroll.CanvasSize = UDim2.new(0, 0, 0, #players * 28)
+end
 
-    function selectPlayer(name, display) {
-        document.getElementById('jjs-selected-name').textContent = name;
-        document.getElementById('jjs-toggle').disabled = false;
+-- Select player
+function selectPlayer(p)
+    local selName = gui.Main:FindFirstChild("SelectedName", true)
+    if selName then
+        selName.Text = p.Name
+    end
+    
+    -- Update highlights
+    local scroll = gui.Main.PlayerScroll
+    for _, btn in pairs(scroll:GetChildren()) do
+        if btn:IsA("TextButton") then
+            if btn.Text == "  " .. p.DisplayName then
+                btn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+                btn.BackgroundTransparency = 0.5
+                btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            else
+                btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                btn.BackgroundTransparency = 0.95
+                btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+            end
+        end
+    end
+    
+    -- Enable toggle
+    gui.Main.ToggleBtn.AutoButtonColor = false
+end
+
+-- Notification
+function notify(msg)
+    local notif = Instance.new("Frame")
+    notif.Size = UDim2.new(0, 250, 0, 35)
+    notif.Position = UDim2.new(0.5, -125, 0, 20)
+    notif.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+    notif.BackgroundTransparency = 0.1
+    notif.BorderSizePixel = 0
+    notif.Parent = gui
+    
+    Instance.new("UICorner", notif).CornerRadius = UDim.new(0, 17)
+    
+    local txt = Instance.new("TextLabel")
+    txt.Size = UDim2.new(1, 0, 1, 0)
+    txt.BackgroundTransparency = 1
+    txt.Text = msg
+    txt.TextColor3 = Color3.fromRGB(255, 255, 255)
+    txt.Font = Enum.Font.GothamSemibold
+    txt.TextSize = 12
+    txt.Parent = notif
+    
+    game.Debris:AddItem(notif, 2)
+end
+
+-- Toggle chase
+function toggleChase()
+    local btn = gui.Main.ToggleBtn
+    local dot = gui.Main:FindFirstChild("StatusDot", true)
+    local statusText = gui.Main:FindFirstChild("StatusText", true)
+    local selName = gui.Main:FindFirstChild("SelectedName", true)
+    
+    if not isActive then
+        if not selName or selName.Text == "Chưa chọn" then
+            notify("⚠️ Vui lòng chọn mục tiêu!")
+            return
+        end
         
-        document.querySelectorAll('.jjs-player').forEach(el => {
-            el.classList.remove('selected');
-            if (el.querySelector('span').textContent === display) {
-                el.classList.add('selected');
-            }
-        });
+        local tp = game.Players:FindFirstChild(selName.Text)
+        if not tp then
+            notify("⚠️ Không tìm thấy người chơi!")
+            return
+        end
         
-        if (isActive) {
-            const tp = game.Players.FindFirstChild(name);
-            if (tp && tp.Character) {
-                targetPlayer = tp;
-                notify(`Đã chuyển mục tiêu: ${display}`);
-            } else {
-                notify('Người chơi chưa spawn!');
-            }
-        }
-    }
+        if not tp.Character or not tp.Character:FindFirstChild("HumanoidRootPart") then
+            notify("⚠️ Người chơi chưa spawn!")
+            return
+        end
+        
+        targetPlayer = tp
+        isActive = true
+        
+        btn.Text = "⏸ TẮT"
+        btn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+        dot.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+        statusText.Text = "Đang bám: " .. tp.DisplayName
+        
+        notify("✅ Bắt đầu bám sát " .. tp.DisplayName)
+        chaseLoop()
+    else
+        isActive = false
+        targetPlayer = nil
+        
+        btn.Text = "▶ KÍCH HOẠT"
+        btn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+        dot.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+        statusText.Text = "Đã dừng"
+        
+        notify("⏹ Đã dừng bám sát")
+    end
+end
 
-    function toggle() {
-        const btn = document.getElementById('jjs-toggle');
-        const dot = document.getElementById('jjs-dot');
-        const statusText = document.getElementById('jjs-status-text');
-        const targetName = document.getElementById('jjs-selected-name').textContent;
-
-        if (!isActive) {
-            if (targetName === 'Chưa chọn') {
-                notify('Vui lòng chọn mục tiêu!');
-                return;
-            }
-
-            const tp = game.Players.FindFirstChild(targetName);
-            if (!tp) {
-                notify('Không tìm thấy người chơi!');
-                return;
-            }
-            if (!tp.Character) {
-                notify('Người chơi chưa spawn!');
-                return;
-            }
-
-            targetPlayer = tp;
-            isActive = true;
+-- Chase loop
+function chaseLoop()
+    if not isActive or not targetPlayer then return end
+    
+    task.spawn(function()
+        while isActive and targetPlayer do
+            local char = Player.Character
+            local tChar = targetPlayer.Character
             
-            btn.textContent = '⏸ TẮT';
-            btn.className = 'jjs-toggle on';
-            dot.className = 'jjs-dot active';
-            statusText.textContent = `Đang bám: ${targetPlayer.DisplayName || targetPlayer.Name}`;
-            
-            notify(`Bắt đầu bám sát ${targetPlayer.DisplayName || targetPlayer.Name}`);
-            chaseLoop();
-        } else {
-            isActive = false;
-            targetPlayer = null;
-            
-            btn.textContent = '▶ KÍCH HOẠT';
-            btn.className = 'jjs-toggle off';
-            dot.className = 'jjs-dot';
-            statusText.textContent = 'Đã dừng';
-            
-            notify('Đã dừng bám sát');
-        }
-    }
-
-    function chaseLoop() {
-        if (!isActive || !targetPlayer) return;
-
-        try {
-            const lp = game.Players.LocalPlayer;
-            const char = lp.Character;
-            const tChar = targetPlayer.Character;
-
-            if (!char || !tChar) {
-                if (!tChar) {
-                    document.getElementById('jjs-status-text').textContent = 'Chờ mục tiêu spawn...';
-                    waitTargetSpawn();
-                    return;
-                }
-                requestAnimationFrame(chaseLoop);
-                return;
-            }
-
-            const hum = char.FindFirstChildOfClass('Humanoid');
-            const tHum = tChar.FindFirstChildOfClass('Humanoid');
-            const hrp = char.FindFirstChild('HumanoidRootPart');
-            const tHrp = tChar.FindFirstChild('HumanoidRootPart');
-
-            if (!hum || !tHum || !hrp || !tHrp) {
-                requestAnimationFrame(chaseLoop);
-                return;
-            }
-
-            if (hum.Health <= 0) {
-                document.getElementById('jjs-status-text').textContent = 'Bạn đã chết...';
-                waitRespawn();
-                return;
-            }
-
-            if (tHum.Health <= 0) {
-                document.getElementById('jjs-status-text').textContent = 'Mục tiêu đã chết...';
-                waitTargetSpawn();
-                return;
-            }
-
-            // Tính vị trí sau lưng
-            const dist = 5;
-            const lv = tHrp.CFrame.LookVector;
-            const behind = new Vector3(
-                tHrp.Position.X - lv.X * dist,
-                tHrp.Position.Y,
-                tHrp.Position.Z - lv.Z * dist
-            );
-
-            hum:MoveTo(behind);
-            hrp.CFrame = CFrame.new(hrp.Position, tHrp.Position);
-
-            const d = Math.floor((hrp.Position - tHrp.Position).Magnitude);
-            document.getElementById('jjs-status-text').textContent = 
-                `Đang bám: ${targetPlayer.DisplayName || targetPlayer.Name} (${d}m)`;
-
-        } catch(e) {}
-
-        if (isActive) requestAnimationFrame(chaseLoop);
-    }
-
-    function waitTargetSpawn() {
-        if (!targetPlayer || !isActive) return;
-        const check = setInterval(() => {
-            if (!isActive || !targetPlayer) { clearInterval(check); return; }
-            if (targetPlayer.Character && targetPlayer.Character.FindFirstChildOfClass('Humanoid') && 
-                targetPlayer.Character.FindFirstChildOfClass('Humanoid').Health > 0) {
-                clearInterval(check);
-                document.getElementById('jjs-status-text').textContent = 
-                    `Đang bám: ${targetPlayer.DisplayName || targetPlayer.Name}`;
-                notify('Mục tiêu đã spawn!');
-            }
-        }, 1000);
-    }
-
-    function waitRespawn() {
-        const lp = game.Players.LocalPlayer;
-        const check = setInterval(() => {
-            if (!isActive) { clearInterval(check); return; }
-            if (lp.Character && lp.Character.FindFirstChildOfClass('Humanoid') && 
-                lp.Character.FindFirstChildOfClass('Humanoid').Health > 0) {
-                clearInterval(check);
-                document.getElementById('jjs-status-text').textContent = 
-                    `Đang bám: ${targetPlayer.DisplayName || targetPlayer.Name}`;
-                notify('Đã spawn!');
-            }
-        }, 1000);
-    }
-
-    function createGUI() {
-        guiElement = document.createElement('div');
-        guiElement.className = 'jjs-gui';
-        guiElement.id = 'jjs-gui';
-        guiElement.innerHTML = `
-            <div class="jjs-header" id="jjs-header">
-                <span class="jjs-title">👁️ Chase GUI</span>
-                <button class="jjs-close" id="jjs-close">✕</button>
-            </div>
-            <div class="jjs-body">
-                <span class="jjs-label">🎯 Mục tiêu hiện tại</span>
-                <div class="jjs-selected">
-                    <span id="jjs-selected-name">Chưa chọn</span>
-                </div>
+            if char and tChar then
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                local tHrp = tChar:FindFirstChild("HumanoidRootPart")
+                local hum = char:FindFirstChildOfClass("Humanoid")
                 
-                <span class="jjs-label">📋 Danh sách người chơi</span>
-                <div class="jjs-list" id="jjs-list">
-                    <div class="jjs-empty">Đang tải...</div>
-                </div>
-                
-                <button class="jjs-refresh" id="jjs-refresh">🔄 Làm mới danh sách</button>
-                
-                <div class="jjs-status">
-                    <div class="jjs-dot" id="jjs-dot"></div>
-                    <span class="jjs-status-text" id="jjs-status-text">Chưa kích hoạt</span>
-                </div>
-                
-                <button class="jjs-toggle off" id="jjs-toggle" disabled>▶ KÍCH HOẠT</button>
-                
-                <div class="jjs-info">F5: Mở/Đóng GUI | Kéo thả để di chuyển</div>
-            </div>
-        `;
-        
-        document.body.appendChild(guiElement);
-        
-        // Event listeners
-        document.getElementById('jjs-close').addEventListener('click', () => {
-            guiElement.style.display = 'none';
-        });
-        
-        document.getElementById('jjs-toggle').addEventListener('click', toggle);
-        document.getElementById('jjs-refresh').addEventListener('click', updateList);
-        
-        // Drag
-        const header = document.getElementById('jjs-header');
-        header.addEventListener('mousedown', (e) => {
-            if (e.target.tagName === 'BUTTON') return;
-            isDragging = true;
-            const rect = guiElement.getBoundingClientRect();
-            dragOffsetX = e.clientX - rect.left;
-            dragOffsetY = e.clientY - rect.top;
-            e.preventDefault();
-        });
-        
-        document.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
-            guiElement.style.left = (e.clientX - dragOffsetX) + 'px';
-            guiElement.style.top = (e.clientY - dragOffsetY) + 'px';
-            guiElement.style.right = 'auto';
-        });
-        
-        document.addEventListener('mouseup', () => { isDragging = false; });
-        
-        // F5 toggle
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'F5') {
-                e.preventDefault();
-                if (guiElement.style.display === 'none' || guiElement.style.display === '') {
-                    guiElement.style.display = 'block';
-                    updateList();
-                } else {
-                    guiElement.style.display = 'none';
-                }
-            }
-        });
-        
-        updateList();
-    }
+                if hrp and tHrp and hum then
+                    -- Vị trí sau lưng
+                    local dist = 5
+                    local lv = tHrp.CFrame.LookVector
+                    local behindPos = Vector3.new(
+                        tHrp.Position.X - lv.X * dist,
+                        tHrp.Position.Y,
+                        tHrp.Position.Z - lv.Z * dist
+                    )
+                    
+                    hum:MoveTo(behindPos)
+                    hrp.CFrame = CFrame.new(hrp.Position, tHrp.Position)
+                    
+                    -- Update status
+                    local statusText = gui.Main:FindFirstChild("StatusText", true)
+                    if statusText then
+                        local d = math.floor((hrp.Position - tHrp.Position).Magnitude)
+                        statusText.Text = "Đang bám: " .. targetPlayer.DisplayName .. " (" .. d .. "m)"
+                    end
+                end
+            end
+            
+            task.wait()
+        end
+    end)
+end
 
-    async function init() {
-        injectStyles();
-        await waitForGame();
-        createGUI();
-        console.log('JJK Chase GUI ready! F5 to open/close.');
-    }
+-- F5 toggle
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.F5 then
+        gui.Main.Visible = not gui.Main.Visible
+        if gui.Main.Visible then
+            updatePlayerList()
+        end
+    end
+end)
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
-    }
-
-})();
+-- Init
+local main = createGUI()
+gui.Main = main
+updatePlayerList()
+notify("👁️ Script loaded! F5 to open GUI")
