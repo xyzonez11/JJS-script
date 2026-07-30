@@ -1,0 +1,263 @@
+--[[
+    Script: JJS Hub - Follow Player
+    Description: A simple hub with a GUI to select a player and fly behind them.
+]]
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+-- Variables
+local player = Players.LocalPlayer
+local character = player.Character
+local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+
+local selectedPlayer = nil
+local isFollowing = false
+local followConnection = nil
+
+-- UI Elements (will be created)
+local screenGui = nil
+local mainFrame = nil
+local playerDropdown = nil
+local toggleButton = nil
+
+-- Function to create the GUI
+local function createGUI()
+    -- Create ScreenGui
+    screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "JJS_Hub"
+    screenGui.Parent = player.PlayerGui
+
+    -- Main Frame (Hub)
+    mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainFrame"
+    mainFrame.Size = UDim2.new(0, 300, 0, 200)
+    mainFrame.Position = UDim2.new(0.5, -150, 0.5, -100)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    mainFrame.BackgroundTransparency = 0.1
+    mainFrame.BorderSizePixel = 0
+    mainFrame.ClipsDescendants = true
+    mainFrame.Parent = screenGui
+
+    -- Title
+    local title = Instance.new("TextLabel")
+    title.Name = "Title"
+    title.Size = UDim2.new(1, 0, 0, 40)
+    title.Position = UDim2.new(0, 0, 0, 0)
+    title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    title.BackgroundTransparency = 0.1
+    title.Text = "JJS Hub"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextScaled = true
+    title.Font = Enum.Font.GothamBold
+    title.Parent = mainFrame
+
+    -- Close Button (X)
+    local closeButton = Instance.new("TextButton")
+    closeButton.Name = "CloseButton"
+    closeButton.Size = UDim2.new(0, 30, 0, 30)
+    closeButton.Position = UDim2.new(1, -35, 0, 5)
+    closeButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    closeButton.Text = "X"
+    closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    closeButton.TextScaled = true
+    closeButton.Font = Enum.Font.GothamBold
+    closeButton.Parent = mainFrame
+    closeButton.MouseButton1Click:Connect(function()
+        screenGui.Enabled = false
+    end)
+
+    -- Player Dropdown Label
+    local dropdownLabel = Instance.new("TextLabel")
+    dropdownLabel.Name = "DropdownLabel"
+    dropdownLabel.Size = UDim2.new(1, -20, 0, 30)
+    dropdownLabel.Position = UDim2.new(0, 10, 0, 50)
+    dropdownLabel.BackgroundTransparency = 1
+    dropdownLabel.Text = "Select Player:"
+    dropdownLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    dropdownLabel.TextXAlignment = Enum.TextXAlignment.Left
+    dropdownLabel.TextSize = 16
+    dropdownLabel.Font = Enum.Font.Gotham
+    dropdownLabel.Parent = mainFrame
+
+    -- Player Dropdown (ScrollingFrame)
+    local dropdownFrame = Instance.new("ScrollingFrame")
+    dropdownFrame.Name = "DropdownFrame"
+    dropdownFrame.Size = UDim2.new(1, -20, 0, 60)
+    dropdownFrame.Position = UDim2.new(0, 10, 0, 85)
+    dropdownFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+    dropdownFrame.BorderSizePixel = 0
+    dropdownFrame.ScrollBarThickness = 6
+    dropdownFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    dropdownFrame.Parent = mainFrame
+
+    -- Populate dropdown with players
+    local function updateDropdown()
+        -- Clear existing buttons
+        for _, child in ipairs(dropdownFrame:GetChildren()) do
+            if child:IsA("TextButton") then
+                child:Destroy()
+            end
+        end
+
+        local players = Players:GetPlayers()
+        local yOffset = 0
+        for _, plr in ipairs(players) do
+            if plr ~= player then
+                local btn = Instance.new("TextButton")
+                btn.Name = plr.Name
+                btn.Size = UDim2.new(1, 0, 0, 30)
+                btn.Position = UDim2.new(0, 0, 0, yOffset)
+                btn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+                btn.Text = plr.Name
+                btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                btn.TextSize = 14
+                btn.Font = Enum.Font.Gotham
+                btn.Parent = dropdownFrame
+
+                btn.MouseButton1Click:Connect(function()
+                    selectedPlayer = plr
+                    -- Highlight selected
+                    for _, child in ipairs(dropdownFrame:GetChildren()) do
+                        if child:IsA("TextButton") then
+                            child.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+                        end
+                    end
+                    btn.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
+                end)
+
+                yOffset = yOffset + 35
+            end
+        end
+        dropdownFrame.CanvasSize = UDim2.new(0, 0, 0, yOffset + 10)
+    end
+
+    updateDropdown()
+
+    -- Toggle Button (On/Off)
+    toggleButton = Instance.new("TextButton")
+    toggleButton.Name = "ToggleButton"
+    toggleButton.Size = UDim2.new(0, 120, 0, 40)
+    toggleButton.Position = UDim2.new(0.5, -60, 1, -55)
+    toggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+    toggleButton.Text = "OFF"
+    toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleButton.TextSize = 18
+    toggleButton.Font = Enum.Font.GothamBold
+    toggleButton.Parent = mainFrame
+
+    toggleButton.MouseButton1Click:Connect(function()
+        if isFollowing then
+            -- Turn off
+            isFollowing = false
+            toggleButton.Text = "OFF"
+            toggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+            if followConnection then
+                followConnection:Disconnect()
+                followConnection = nil
+            end
+        else
+            -- Turn on
+            if selectedPlayer then
+                isFollowing = true
+                toggleButton.Text = "ON"
+                toggleButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+                -- Start following
+                if followConnection then
+                    followConnection:Disconnect()
+                end
+                followConnection = RunService.Heartbeat:Connect(function()
+                    local targetChar = selectedPlayer.Character
+                    if targetChar and targetChar:FindFirstChild("HumanoidRootPart") then
+                        local targetRoot = targetChar.HumanoidRootPart
+                        local character = player.Character
+                        if character and character:FindFirstChild("HumanoidRootPart") then
+                            local root = character.HumanoidRootPart
+                            -- Fly behind the target (behind relative to their facing direction)
+                            local targetCFrame = targetRoot.CFrame
+                            local behindPosition = targetCFrame.Position - (targetCFrame.LookVector * 5) + Vector3.new(0, 2, 0) -- 5 studs behind, 2 studs up
+                            root.CFrame = CFrame.new(behindPosition, targetCFrame.Position)
+                        end
+                    end
+                end)
+            else
+                -- No player selected, show warning
+                toggleButton.Text = "No Player!"
+                toggleButton.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
+                task.wait(1)
+                toggleButton.Text = "OFF"
+                toggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+            end
+        end
+    end)
+
+    -- Update dropdown when players join/leave
+    Players.PlayerAdded:Connect(updateDropdown)
+    Players.PlayerRemoving:Connect(updateDropdown)
+
+    return screenGui
+end
+
+-- Function to open the hub (for use with a button or command)
+local function openHub()
+    if screenGui then
+        screenGui.Enabled = true
+    else
+        createGUI()
+    end
+end
+
+-- Function to close the hub
+local function closeHub()
+    if screenGui then
+        screenGui.Enabled = false
+    end
+end
+
+-- Create and show the hub initially
+createGUI()
+
+-- Optional: Bind to a key (you can remove this if you don't want hotkeys)
+-- Uncomment below if you want a hotkey to toggle the hub (default: 'H')
+--[[
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.H then
+        if screenGui then
+            screenGui.Enabled = not screenGui.Enabled
+        end
+    end
+end)
+]]
+
+-- Print instructions
+print("JJS Hub loaded! GUI should appear on your screen.")
+print("Select a player from the dropdown, then click the toggle button to fly behind them.")
+print("Click the 'X' button to close the hub.")
+
+-- Cleanup function (optional)
+local function cleanup()
+    if followConnection then
+        followConnection:Disconnect()
+        followConnection = nil
+    end
+    if screenGui then
+        screenGui:Destroy()
+        screenGui = nil
+    end
+end
+
+-- Handle player respawn (optional)
+player.CharacterAdded:Connect(function(newChar)
+    character = newChar
+    rootPart = character and character:FindFirstChild("HumanoidRootPart")
+end)
+
+-- If character is nil, wait for it
+if not character then
+    player.CharacterAdded:Wait()
+    character = player.Character
+    rootPart = character and character:FindFirstChild("HumanoidRootPart")
+end
