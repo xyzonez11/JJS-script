@@ -1,294 +1,425 @@
 -- ============================================================
--- JJK Chase Omega – Bản sửa lỗi GUI + Tối ưu
+-- Universal Chase Omega V4 – Full Code + Auto Evade
 -- Tác giả: Shadow Cat Black
+-- Tính năng: GUI, bay sau lưng, bay vòng quanh, auto evade, noclip, tàng hình
+-- Phím: F5 mở GUI | F6 bật/tắt | F7 đổi chế độ bay
 -- ============================================================
 
 local Player = game.Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
 
 -- ==================== CẤU HÌNH ====================
 local CONFIG = {
     Speed = 30,
-    MaxDistance = 100,
-    TeleportDistance = 80,
+    MaxDistance = 120,
+    TeleportDistance = 90,
     FollowDistance = 4,
+    OrbitRadius = 6,
+    OrbitSpeed = 4.5,
     AutoTeleport = true,
     AntiFall = true,
     ShowDistance = true,
+    Mode = "follow",            -- "follow" hoặc "orbit"
+    EvadeEnabled = true,
+    EvadeRange = 20,
+    EvadeDistance = 30,
+    EvadeCooldown = 1.0,
 }
 
--- ==================== BIẾN ====================
+-- ==================== BIẾN TOÀN CỤC ====================
 local isActive = false
 local targetPlayer = nil
 local noclipEnabled = false
 local isInvisible = false
+local guiMain = nil
+local targetNameLabel = nil
+local statusTextLabel = nil
+local statusDot = nil
+local toggleBtn = nil
+local modeBtn = nil
+local orbitAngle = 0
+local lastEvadeTime = 0
 
--- ==================== GUI ====================
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "JJKChaseOmega"
-screenGui.Parent = game.CoreGui
-screenGui.ResetOnSpawn = false
-screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+-- ==================== TẠO GUI ====================
+local function createGUI()
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "UniversalChase"
+    screenGui.Parent = game.CoreGui
+    screenGui.ResetOnSpawn = false
+    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-local main = Instance.new("Frame")
-main.Name = "Main"
-main.Size = UDim2.new(0, 320, 0, 400)
-main.Position = UDim2.new(0.5, -160, 0.5, -200)
-main.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-main.BackgroundTransparency = 0.1
-main.BorderSizePixel = 0
-main.Active = true
-main.Draggable = true
-main.Visible = false
-main.Parent = screenGui
-
-local shadow = Instance.new("UIStroke")
-shadow.Color = Color3.fromRGB(138, 43, 226)
-shadow.Thickness = 2
-shadow.Transparency = 0.4
-shadow.Parent = main
-
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 12)
-corner.Parent = main
-
--- Header
-local header = Instance.new("Frame")
-header.Size = UDim2.new(1, 0, 0, 40)
-header.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-header.BackgroundTransparency = 0.3
-header.BorderSizePixel = 0
-header.Parent = main
-
-local headerCorner = Instance.new("UICorner")
-headerCorner.CornerRadius = UDim.new(0, 12)
-headerCorner.Parent = header
-
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -50, 1, 0)
-title.Position = UDim2.new(0, 15, 0, 0)
-title.BackgroundTransparency = 1
-title.Text = "⚡ SIX EYES OMEGA"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 15
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.Parent = header
-
-local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.new(0, 28, 0, 28)
-closeBtn.Position = UDim2.new(1, -36, 0.5, -14)
-closeBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
-closeBtn.BackgroundTransparency = 0.6
-closeBtn.Text = "✕"
-closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-closeBtn.Font = Enum.Font.GothamBold
-closeBtn.TextSize = 16
-closeBtn.Parent = header
-
-local closeCorner = Instance.new("UICorner")
-closeCorner.CornerRadius = UDim.new(1, 0)
-closeCorner.Parent = closeBtn
-
-closeBtn.MouseButton1Click:Connect(function()
+    local main = Instance.new("Frame")
+    main.Name = "Main"
+    main.Size = UDim2.new(0, 360, 0, 490)
+    main.Position = UDim2.new(0.5, -180, 0.5, -245)
+    main.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
+    main.BackgroundTransparency = 0.1
+    main.BorderSizePixel = 0
+    main.Active = true
+    main.Draggable = true
     main.Visible = false
-end)
+    main.Parent = screenGui
 
--- Target frame
-local targetFrame = Instance.new("Frame")
-targetFrame.Size = UDim2.new(1, -20, 0, 38)
-targetFrame.Position = UDim2.new(0, 10, 0, 50)
-targetFrame.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-targetFrame.BackgroundTransparency = 0.85
-targetFrame.BorderSizePixel = 0
-targetFrame.Parent = main
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(255, 70, 70)
+    stroke.Thickness = 2
+    stroke.Transparency = 0.3
+    stroke.Parent = main
 
-local targetCorner = Instance.new("UICorner")
-targetCorner.CornerRadius = UDim.new(0, 8)
-targetCorner.Parent = targetFrame
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = main
 
-local targetLabel = Instance.new("TextLabel")
-targetLabel.Size = UDim2.new(0, 75, 1, 0)
-targetLabel.Position = UDim2.new(0, 10, 0, 0)
-targetLabel.BackgroundTransparency = 1
-targetLabel.Text = "🎯 Mục tiêu:"
-targetLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-targetLabel.Font = Enum.Font.GothamSemibold
-targetLabel.TextSize = 12
-targetLabel.TextXAlignment = Enum.TextXAlignment.Left
-targetLabel.Parent = targetFrame
+    -- Header
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1, 0, 0, 40)
+    header.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+    header.BackgroundTransparency = 0.25
+    header.BorderSizePixel = 0
+    header.Parent = main
 
-local targetName = Instance.new("TextLabel")
-targetName.Name = "TargetName"
-targetName.Size = UDim2.new(1, -85, 1, 0)
-targetName.Position = UDim2.new(0, 80, 0, 0)
-targetName.BackgroundTransparency = 1
-targetName.Text = "Chưa chọn"
-targetName.TextColor3 = Color3.fromRGB(255, 255, 255)
-targetName.Font = Enum.Font.GothamBold
-targetName.TextSize = 13
-targetName.TextXAlignment = Enum.TextXAlignment.Left
-targetName.Parent = targetFrame
+    local headerCorner = Instance.new("UICorner")
+    headerCorner.CornerRadius = UDim.new(0, 12)
+    headerCorner.Parent = header
 
--- Toggle buttons
-local btnFrame = Instance.new("Frame")
-btnFrame.Size = UDim2.new(1, -20, 0, 38)
-btnFrame.Position = UDim2.new(0, 10, 0, 94)
-btnFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-btnFrame.BackgroundTransparency = 0.6
-btnFrame.BorderSizePixel = 0
-btnFrame.Parent = main
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -50, 1, 0)
+    title.Position = UDim2.new(0, 15, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "🎯 CHASE OMEGA V4"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 15
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = header
 
-local btnCorner = Instance.new("UICorner")
-btnCorner.CornerRadius = UDim.new(0, 8)
-btnCorner.Parent = btnFrame
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0, 28, 0, 28)
+    closeBtn.Position = UDim2.new(1, -36, 0.5, -14)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+    closeBtn.BackgroundTransparency = 0.6
+    closeBtn.Text = "✕"
+    closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 16
+    closeBtn.Parent = header
 
-local noclipBtn = Instance.new("TextButton")
-noclipBtn.Name = "NoclipBtn"
-noclipBtn.Size = UDim2.new(0, 70, 0, 28)
-noclipBtn.Position = UDim2.new(0, 8, 0.5, -14)
-noclipBtn.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
-noclipBtn.Text = "Noclip OFF"
-noclipBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-noclipBtn.Font = Enum.Font.GothamBold
-noclipBtn.TextSize = 11
-noclipBtn.AutoButtonColor = false
-noclipBtn.Parent = btnFrame
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(1, 0)
+    closeCorner.Parent = closeBtn
 
-local noclipCorner = Instance.new("UICorner")
-noclipCorner.CornerRadius = UDim.new(0, 6)
-noclipCorner.Parent = noclipBtn
+    closeBtn.MouseButton1Click:Connect(function()
+        main.Visible = false
+    end)
 
-local invisibleBtn = Instance.new("TextButton")
-invisibleBtn.Name = "InvisibleBtn"
-invisibleBtn.Size = UDim2.new(0, 75, 0, 28)
-invisibleBtn.Position = UDim2.new(0, 90, 0.5, -14)
-invisibleBtn.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
-invisibleBtn.Text = "👻 Ẩn OFF"
-invisibleBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
-invisibleBtn.Font = Enum.Font.GothamBold
-invisibleBtn.TextSize = 11
-invisibleBtn.AutoButtonColor = false
-invisibleBtn.Parent = btnFrame
+    -- Target Display
+    local targetFrame = Instance.new("Frame")
+    targetFrame.Size = UDim2.new(1, -20, 0, 38)
+    targetFrame.Position = UDim2.new(0, 10, 0, 50)
+    targetFrame.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+    targetFrame.BackgroundTransparency = 0.85
+    targetFrame.BorderSizePixel = 0
+    targetFrame.Parent = main
 
-local invCorner = Instance.new("UICorner")
-invCorner.CornerRadius = UDim.new(0, 6)
-invCorner.Parent = invisibleBtn
+    local targetCorner = Instance.new("UICorner")
+    targetCorner.CornerRadius = UDim.new(0, 8)
+    targetCorner.Parent = targetFrame
 
--- Player list
-local listLabel = Instance.new("TextLabel")
-listLabel.Size = UDim2.new(1, -20, 0, 20)
-listLabel.Position = UDim2.new(0, 10, 0, 138)
-listLabel.BackgroundTransparency = 1
-listLabel.Text = "📋 Danh sách người chơi"
-listLabel.TextColor3 = Color3.fromRGB(170, 170, 255)
-listLabel.Font = Enum.Font.GothamSemibold
-listLabel.TextSize = 11
-listLabel.TextXAlignment = Enum.TextXAlignment.Left
-listLabel.Parent = main
+    local targetLabel = Instance.new("TextLabel")
+    targetLabel.Size = UDim2.new(0, 75, 1, 0)
+    targetLabel.Position = UDim2.new(0, 10, 0, 0)
+    targetLabel.BackgroundTransparency = 1
+    targetLabel.Text = "🎯 Mục tiêu:"
+    targetLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    targetLabel.Font = Enum.Font.GothamSemibold
+    targetLabel.TextSize = 12
+    targetLabel.TextXAlignment = Enum.TextXAlignment.Left
+    targetLabel.Parent = targetFrame
 
-local scroll = Instance.new("ScrollingFrame")
-scroll.Name = "PlayerScroll"
-scroll.Size = UDim2.new(1, -20, 0, 110)
-scroll.Position = UDim2.new(0, 10, 0, 160)
-scroll.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-scroll.BackgroundTransparency = 0.7
-scroll.BorderSizePixel = 0
-scroll.ScrollBarThickness = 4
-scroll.ScrollBarImageColor3 = Color3.fromRGB(138, 43, 226)
-scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-scroll.Parent = main
+    targetNameLabel = Instance.new("TextLabel")
+    targetNameLabel.Size = UDim2.new(1, -85, 1, 0)
+    targetNameLabel.Position = UDim2.new(0, 80, 0, 0)
+    targetNameLabel.BackgroundTransparency = 1
+    targetNameLabel.Text = "Chưa chọn"
+    targetNameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    targetNameLabel.Font = Enum.Font.GothamBold
+    targetNameLabel.TextSize = 13
+    targetNameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    targetNameLabel.Parent = targetFrame
 
-local scrollCorner = Instance.new("UICorner")
-scrollCorner.CornerRadius = UDim.new(0, 8)
-scrollCorner.Parent = scroll
+    -- Mode Selector
+    local modeFrame = Instance.new("Frame")
+    modeFrame.Size = UDim2.new(1, -20, 0, 32)
+    modeFrame.Position = UDim2.new(0, 10, 0, 94)
+    modeFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    modeFrame.BackgroundTransparency = 0.6
+    modeFrame.BorderSizePixel = 0
+    modeFrame.Parent = main
 
-local listLayout = Instance.new("UIListLayout")
-listLayout.Padding = UDim.new(0, 3)
-listLayout.Parent = scroll
+    local modeCorner = Instance.new("UICorner")
+    modeCorner.CornerRadius = UDim.new(0, 8)
+    modeCorner.Parent = modeFrame
 
--- Refresh button
-local refreshBtn = Instance.new("TextButton")
-refreshBtn.Size = UDim2.new(1, -20, 0, 28)
-refreshBtn.Position = UDim2.new(0, 10, 0, 276)
-refreshBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-refreshBtn.BackgroundTransparency = 0.8
-refreshBtn.Text = "🔄 Làm mới"
-refreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-refreshBtn.Font = Enum.Font.GothamSemibold
-refreshBtn.TextSize = 12
-refreshBtn.Parent = main
+    local modeLabel = Instance.new("TextLabel")
+    modeLabel.Size = UDim2.new(0, 80, 1, 0)
+    modeLabel.Position = UDim2.new(0, 10, 0, 0)
+    modeLabel.BackgroundTransparency = 1
+    modeLabel.Text = "🔄 Chế độ bay:"
+    modeLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    modeLabel.Font = Enum.Font.GothamSemibold
+    modeLabel.TextSize = 11
+    modeLabel.TextXAlignment = Enum.TextXAlignment.Left
+    modeLabel.Parent = modeFrame
 
-local refreshCorner = Instance.new("UICorner")
-refreshCorner.CornerRadius = UDim.new(0, 8)
-refreshCorner.Parent = refreshBtn
+    modeBtn = Instance.new("TextButton")
+    modeBtn.Name = "ModeBtn"
+    modeBtn.Size = UDim2.new(0, 80, 0, 24)
+    modeBtn.Position = UDim2.new(1, -90, 0.5, -12)
+    modeBtn.BackgroundColor3 = Color3.fromRGB(255, 200, 50)
+    modeBtn.Text = "Sau lưng"
+    modeBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+    modeBtn.Font = Enum.Font.GothamBold
+    modeBtn.TextSize = 11
+    modeBtn.AutoButtonColor = false
+    modeBtn.Parent = modeFrame
 
-refreshBtn.MouseButton1Click:Connect(function()
-    updatePlayerList()
-end)
+    local modeCorner2 = Instance.new("UICorner")
+    modeCorner2.CornerRadius = UDim.new(0, 6)
+    modeCorner2.Parent = modeBtn
 
--- Status frame
-local statusFrame = Instance.new("Frame")
-statusFrame.Size = UDim2.new(1, -20, 0, 34)
-statusFrame.Position = UDim2.new(0, 10, 0, 310)
-statusFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-statusFrame.BackgroundTransparency = 0.6
-statusFrame.BorderSizePixel = 0
-statusFrame.Parent = main
+    modeBtn.MouseButton1Click:Connect(function()
+        if CONFIG.Mode == "follow" then
+            CONFIG.Mode = "orbit"
+            modeBtn.Text = "Vòng quanh"
+            modeBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 100)
+            notify("🔄 Chuyển sang VÒNG QUANH")
+        else
+            CONFIG.Mode = "follow"
+            modeBtn.Text = "Sau lưng"
+            modeBtn.BackgroundColor3 = Color3.fromRGB(255, 200, 50)
+            notify("🔄 Chuyển sang SAU LƯNG")
+        end
+    end)
 
-local statusCorner = Instance.new("UICorner")
-statusCorner.CornerRadius = UDim.new(0, 8)
-statusCorner.Parent = statusFrame
+    -- Noclip + Invisible
+    local btnFrame = Instance.new("Frame")
+    btnFrame.Size = UDim2.new(1, -20, 0, 38)
+    btnFrame.Position = UDim2.new(0, 10, 0, 132)
+    btnFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    btnFrame.BackgroundTransparency = 0.6
+    btnFrame.BorderSizePixel = 0
+    btnFrame.Parent = main
 
-local dot = Instance.new("Frame")
-dot.Name = "StatusDot"
-dot.Size = UDim2.new(0, 10, 0, 10)
-dot.Position = UDim2.new(0, 12, 0.5, -5)
-dot.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
-dot.Parent = statusFrame
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 8)
+    btnCorner.Parent = btnFrame
 
-local dotCorner = Instance.new("UICorner")
-dotCorner.CornerRadius = UDim.new(1, 0)
-dotCorner.Parent = dot
+    local noclipBtn = Instance.new("TextButton")
+    noclipBtn.Name = "NoclipBtn"
+    noclipBtn.Size = UDim2.new(0, 70, 0, 28)
+    noclipBtn.Position = UDim2.new(0, 8, 0.5, -14)
+    noclipBtn.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+    noclipBtn.Text = "Noclip OFF"
+    noclipBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    noclipBtn.Font = Enum.Font.GothamBold
+    noclipBtn.TextSize = 11
+    noclipBtn.AutoButtonColor = false
+    noclipBtn.Parent = btnFrame
 
-local statusText = Instance.new("TextLabel")
-statusText.Name = "StatusText"
-statusText.Size = UDim2.new(1, -30, 1, 0)
-statusText.Position = UDim2.new(0, 28, 0, 0)
-statusText.BackgroundTransparency = 1
-statusText.Text = "Chưa kích hoạt"
-statusText.TextColor3 = Color3.fromRGB(220, 220, 220)
-statusText.Font = Enum.Font.Gotham
-statusText.TextSize = 12
-statusText.TextXAlignment = Enum.TextXAlignment.Left
-statusText.Parent = statusFrame
+    local noclipCorner = Instance.new("UICorner")
+    noclipCorner.CornerRadius = UDim.new(0, 6)
+    noclipCorner.Parent = noclipBtn
 
--- Toggle button
-local toggleBtn = Instance.new("TextButton")
-toggleBtn.Name = "ToggleBtn"
-toggleBtn.Size = UDim2.new(1, -20, 0, 36)
-toggleBtn.Position = UDim2.new(0, 10, 0, 350)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-toggleBtn.Text = "▶ KÍCH HOẠT"
-toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.TextSize = 14
-toggleBtn.AutoButtonColor = false
-toggleBtn.Parent = main
+    local invisibleBtn = Instance.new("TextButton")
+    invisibleBtn.Name = "InvisibleBtn"
+    invisibleBtn.Size = UDim2.new(0, 75, 0, 28)
+    invisibleBtn.Position = UDim2.new(0, 90, 0.5, -14)
+    invisibleBtn.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+    invisibleBtn.Text = "👻 Ẩn OFF"
+    invisibleBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+    invisibleBtn.Font = Enum.Font.GothamBold
+    invisibleBtn.TextSize = 11
+    invisibleBtn.AutoButtonColor = false
+    invisibleBtn.Parent = btnFrame
 
-local toggleCorner = Instance.new("UICorner")
-toggleCorner.CornerRadius = UDim.new(0, 10)
-toggleCorner.Parent = toggleBtn
+    local invCorner = Instance.new("UICorner")
+    invCorner.CornerRadius = UDim.new(0, 6)
+    invCorner.Parent = invisibleBtn
 
--- ==================== HÀM ====================
+    -- Evade toggle
+    local evadeFrame = Instance.new("Frame")
+    evadeFrame.Size = UDim2.new(1, -20, 0, 32)
+    evadeFrame.Position = UDim2.new(0, 10, 0, 176)
+    evadeFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    evadeFrame.BackgroundTransparency = 0.6
+    evadeFrame.BorderSizePixel = 0
+    evadeFrame.Parent = main
+
+    local evadeCorner = Instance.new("UICorner")
+    evadeCorner.CornerRadius = UDim.new(0, 8)
+    evadeCorner.Parent = evadeFrame
+
+    local evadeLabel = Instance.new("TextLabel")
+    evadeLabel.Size = UDim2.new(0, 100, 1, 0)
+    evadeLabel.Position = UDim2.new(0, 10, 0, 0)
+    evadeLabel.BackgroundTransparency = 1
+    evadeLabel.Text = "🛡️ Tự động né:"
+    evadeLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    evadeLabel.Font = Enum.Font.GothamSemibold
+    evadeLabel.TextSize = 11
+    evadeLabel.TextXAlignment = Enum.TextXAlignment.Left
+    evadeLabel.Parent = evadeFrame
+
+    local evadeBtn = Instance.new("TextButton")
+    evadeBtn.Name = "EvadeBtn"
+    evadeBtn.Size = UDim2.new(0, 70, 0, 24)
+    evadeBtn.Position = UDim2.new(1, -80, 0.5, -12)
+    evadeBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+    evadeBtn.Text = "ON"
+    evadeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    evadeBtn.Font = Enum.Font.GothamBold
+    evadeBtn.TextSize = 11
+    evadeBtn.AutoButtonColor = false
+    evadeBtn.Parent = evadeFrame
+
+    local evadeCorner2 = Instance.new("UICorner")
+    evadeCorner2.CornerRadius = UDim.new(0, 6)
+    evadeCorner2.Parent = evadeBtn
+
+    evadeBtn.MouseButton1Click:Connect(function()
+        if CONFIG.EvadeEnabled then
+            CONFIG.EvadeEnabled = false
+            evadeBtn.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+            evadeBtn.Text = "OFF"
+            notify("🛡️ Tự động né ĐÃ TẮT")
+        else
+            CONFIG.EvadeEnabled = true
+            evadeBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+            evadeBtn.Text = "ON"
+            notify("🛡️ Tự động né ĐÃ BẬT")
+        end
+    end)
+
+    -- Player list
+    local listLabel = Instance.new("TextLabel")
+    listLabel.Size = UDim2.new(1, -20, 0, 20)
+    listLabel.Position = UDim2.new(0, 10, 0, 214)
+    listLabel.BackgroundTransparency = 1
+    listLabel.Text = "📋 Danh sách người chơi"
+    listLabel.TextColor3 = Color3.fromRGB(170, 170, 255)
+    listLabel.Font = Enum.Font.GothamSemibold
+    listLabel.TextSize = 11
+    listLabel.TextXAlignment = Enum.TextXAlignment.Left
+    listLabel.Parent = main
+
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Name = "PlayerScroll"
+    scroll.Size = UDim2.new(1, -20, 0, 110)
+    scroll.Position = UDim2.new(0, 10, 0, 236)
+    scroll.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    scroll.BackgroundTransparency = 0.7
+    scroll.BorderSizePixel = 0
+    scroll.ScrollBarThickness = 4
+    scroll.ScrollBarImageColor3 = Color3.fromRGB(255, 70, 70)
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scroll.Parent = main
+
+    local scrollCorner = Instance.new("UICorner")
+    scrollCorner.CornerRadius = UDim.new(0, 8)
+    scrollCorner.Parent = scroll
+
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.Padding = UDim.new(0, 3)
+    listLayout.Parent = scroll
+
+    -- Refresh Button
+    local refreshBtn = Instance.new("TextButton")
+    refreshBtn.Size = UDim2.new(1, -20, 0, 28)
+    refreshBtn.Position = UDim2.new(0, 10, 0, 352)
+    refreshBtn.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+    refreshBtn.BackgroundTransparency = 0.8
+    refreshBtn.Text = "🔄 Làm mới"
+    refreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    refreshBtn.Font = Enum.Font.GothamSemibold
+    refreshBtn.TextSize = 12
+    refreshBtn.Parent = main
+
+    local refreshCorner = Instance.new("UICorner")
+    refreshCorner.CornerRadius = UDim.new(0, 8)
+    refreshCorner.Parent = refreshBtn
+
+    refreshBtn.MouseButton1Click:Connect(function()
+        updatePlayerList(scroll)
+    end)
+
+    -- Status
+    local statusFrame = Instance.new("Frame")
+    statusFrame.Size = UDim2.new(1, -20, 0, 34)
+    statusFrame.Position = UDim2.new(0, 10, 0, 386)
+    statusFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    statusFrame.BackgroundTransparency = 0.6
+    statusFrame.BorderSizePixel = 0
+    statusFrame.Parent = main
+
+    local statusCorner = Instance.new("UICorner")
+    statusCorner.CornerRadius = UDim.new(0, 8)
+    statusCorner.Parent = statusFrame
+
+    statusDot = Instance.new("Frame")
+    statusDot.Size = UDim2.new(0, 10, 0, 10)
+    statusDot.Position = UDim2.new(0, 12, 0.5, -5)
+    statusDot.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+    statusDot.Parent = statusFrame
+
+    local dotCorner = Instance.new("UICorner")
+    dotCorner.CornerRadius = UDim.new(1, 0)
+    dotCorner.Parent = statusDot
+
+    statusTextLabel = Instance.new("TextLabel")
+    statusTextLabel.Size = UDim2.new(1, -30, 1, 0)
+    statusTextLabel.Position = UDim2.new(0, 28, 0, 0)
+    statusTextLabel.BackgroundTransparency = 1
+    statusTextLabel.Text = "Chưa kích hoạt"
+    statusTextLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+    statusTextLabel.Font = Enum.Font.Gotham
+    statusTextLabel.TextSize = 12
+    statusTextLabel.TextXAlignment = Enum.TextXAlignment.Left
+    statusTextLabel.Parent = statusFrame
+
+    -- Toggle Button
+    toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(1, -20, 0, 36)
+    toggleBtn.Position = UDim2.new(0, 10, 0, 426)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+    toggleBtn.Text = "▶ KÍCH HOẠT"
+    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextSize = 14
+    toggleBtn.AutoButtonColor = false
+    toggleBtn.Parent = main
+
+    local toggleCorner = Instance.new("UICorner")
+    toggleCorner.CornerRadius = UDim.new(0, 10)
+    toggleCorner.Parent = toggleBtn
+
+    toggleBtn.MouseButton1Click:Connect(toggleChase)
+
+    guiMain = main
+    return screenGui, scroll
+end
+
+-- ==================== HÀM TIỆN ÍCH ====================
 function notify(msg)
+    local screenGui = game.CoreGui:FindFirstChild("UniversalChase")
+    if not screenGui then return end
     local notif = Instance.new("Frame")
     notif.Size = UDim2.new(0, 280, 0, 36)
     notif.Position = UDim2.new(0.5, -140, 0, 20)
-    notif.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-    notif.BackgroundTransparency = 0.2
+    notif.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+    notif.BackgroundTransparency = 0.15
     notif.BorderSizePixel = 0
     notif.Parent = screenGui
 
@@ -308,7 +439,7 @@ function notify(msg)
     game.Debris:AddItem(notif, 2)
 end
 
-function updatePlayerList()
+function updatePlayerList(scroll)
     for _, child in pairs(scroll:GetChildren()) do
         if child:IsA("TextButton") then
             child:Destroy()
@@ -340,7 +471,7 @@ function updatePlayerList()
             btn.Parent = scroll
 
             btn.MouseButton1Click:Connect(function()
-                selectPlayer(p)
+                selectPlayer(p, scroll)
             end)
         end
     end
@@ -348,16 +479,17 @@ function updatePlayerList()
     scroll.CanvasSize = UDim2.new(0, 0, 0, count * 31)
 end
 
-function selectPlayer(p)
-    targetName.Text = p.DisplayName
+function selectPlayer(p, scroll)
+    if not targetNameLabel then return end
+    targetNameLabel.Text = p.DisplayName
     if p.DisplayName ~= p.Name then
-        targetName.Text = p.DisplayName .. " (@" .. p.Name .. ")"
+        targetNameLabel.Text = p.DisplayName .. " (@" .. p.Name .. ")"
     end
 
     for _, btn in pairs(scroll:GetChildren()) do
         if btn:IsA("TextButton") then
             if btn.Text:find(p.Name) then
-                btn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+                btn.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
                 btn.BackgroundTransparency = 0.5
                 btn.TextColor3 = Color3.fromRGB(255, 255, 255)
             else
@@ -365,6 +497,18 @@ function selectPlayer(p)
                 btn.BackgroundTransparency = 0.95
                 btn.TextColor3 = Color3.fromRGB(200, 200, 200)
             end
+        end
+    end
+end
+
+-- ==================== NOCLIP & INVISIBLE ====================
+function toggleNoclip(state)
+    noclipEnabled = state
+    local char = Player.Character
+    if not char then return end
+    for _, part in pairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = not state
         end
     end
 end
@@ -381,31 +525,15 @@ function toggleInvisible(state)
     end
 end
 
-function noclip()
-    noclipEnabled = true
-    task.spawn(function()
-        while noclipEnabled do
-            local char = Player.Character
-            if char then
-                for _, part in pairs(char:GetDescendants()) do
-                    if part:IsA("BasePart") and part.CanCollide == true then
-                        part.CanCollide = false
-                    end
-                end
-            end
-            task.wait()
-        end
-    end)
-end
-
+-- ==================== BẬT/TẮT CHASE ====================
 function toggleChase()
     if not isActive then
-        if targetName.Text == "Chưa chọn" then
-            notify("⚠️ Chọn mục tiêu trước!")
+        if not targetNameLabel or targetNameLabel.Text == "Chưa chọn" then
+            notify("⚠️ Vui lòng chọn mục tiêu!")
             return
         end
 
-        local name = targetName.Text
+        local name = targetNameLabel.Text
         if name:find("@") then
             name = name:match("@(.+)%)") or name
         end
@@ -423,18 +551,22 @@ function toggleChase()
 
         targetPlayer = tp
         isActive = true
+        orbitAngle = 0
 
         toggleBtn.Text = "⏸ TẮT"
         toggleBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
-        dot.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
-        statusText.Text = "Đang bám: " .. tp.DisplayName
+        statusDot.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+        statusTextLabel.Text = "Đang bám: " .. tp.DisplayName
 
         if not isInvisible then
             isInvisible = true
             toggleInvisible(true)
-            invisibleBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
-            invisibleBtn.Text = "👻 Ẩn ON"
-            invisibleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            local invBtn = guiMain:FindFirstChild("InvisibleBtn", true)
+            if invBtn then
+                invBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+                invBtn.Text = "👻 Ẩn ON"
+                invBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            end
         end
 
         notify("✅ Bắt đầu bám " .. tp.DisplayName)
@@ -443,16 +575,19 @@ function toggleChase()
         targetPlayer = nil
 
         toggleBtn.Text = "▶ KÍCH HOẠT"
-        toggleBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-        dot.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
-        statusText.Text = "Đã dừng"
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+        statusDot.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+        statusTextLabel.Text = "Đã dừng"
 
         if isInvisible then
             isInvisible = false
             toggleInvisible(false)
-            invisibleBtn.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
-            invisibleBtn.Text = "👻 Ẩn OFF"
-            invisibleBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+            local invBtn = guiMain:FindFirstChild("InvisibleBtn", true)
+            if invBtn then
+                invBtn.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+                invBtn.Text = "👻 Ẩn OFF"
+                invBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+            end
         end
 
         notify("⏹ Đã dừng bám")
@@ -460,105 +595,184 @@ function toggleChase()
 end
 
 -- ==================== FLY LOOP ====================
-RunService.RenderStepped:Connect(function()
-    if not isActive or not targetPlayer then return end
+local function flyLoop()
+    RunService.RenderStepped:Connect(function()
+        if not isActive or not targetPlayer then return end
 
-    local char = Player.Character
-    local tChar = targetPlayer.Character
+        local char = Player.Character
+        local tChar = targetPlayer.Character
+        if not char or not tChar then return end
 
-    if not char or not tChar then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        local tHrp = tChar:FindFirstChild("HumanoidRootPart")
+        if not hrp or not tHrp then return end
 
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local tHrp = tChar:FindFirstChild("HumanoidRootPart")
+        local dist = (hrp.Position - tHrp.Position).Magnitude
 
-    if not hrp or not tHrp then return end
-
-    local dist = (hrp.Position - tHrp.Position).Magnitude
-
-    if CONFIG.AutoTeleport and dist > CONFIG.MaxDistance then
-        local teleportPos = tHrp.CFrame:PointToWorldSpace(Vector3.new(0, 2, CONFIG.TeleportDistance * -1))
-        hrp.CFrame = CFrame.new(teleportPos, tHrp.Position)
-        return
-    end
-
-    if CONFIG.AntiFall and hrp.Position.Y < -50 then
-        local teleportPos = tHrp.CFrame:PointToWorldSpace(Vector3.new(0, 10, CONFIG.FollowDistance * -1))
-        hrp.CFrame = CFrame.new(teleportPos, tHrp.Position)
-        notify("🔄 Teleport khỏi vực")
-        return
-    end
-
-    local behindPos = tHrp.CFrame:PointToWorldSpace(Vector3.new(0, 1, CONFIG.FollowDistance))
-
-    for _, v in pairs(hrp:GetChildren()) do
-        if v:IsA("BodyVelocity") or v:IsA("BodyGyro") then
-            v:Destroy()
+        -- Auto teleport
+        if CONFIG.AutoTeleport and dist > CONFIG.MaxDistance then
+            local teleportPos = tHrp.CFrame:PointToWorldSpace(Vector3.new(0, 2, CONFIG.TeleportDistance * -1))
+            hrp.CFrame = CFrame.new(teleportPos, tHrp.Position)
+            return
         end
-    end
 
-    local direction = behindPos - hrp.Position
-    local bv = Instance.new("BodyVelocity")
-    bv.MaxForce = Vector3.new(1e8, 1e8, 1e8)
-    bv.Velocity = direction * CONFIG.Speed
-    bv.Parent = hrp
+        -- Anti Fall
+        if CONFIG.AntiFall and hrp.Position.Y < -50 then
+            local teleportPos = tHrp.CFrame:PointToWorldSpace(Vector3.new(0, 10, CONFIG.FollowDistance * -1))
+            hrp.CFrame = CFrame.new(teleportPos, tHrp.Position)
+            notify("🔄 Teleport khỏi vực")
+            return
+        end
 
-    local bg = Instance.new("BodyGyro")
-    bg.MaxTorque = Vector3.new(1e8, 1e8, 1e8)
-    bg.CFrame = CFrame.new(hrp.Position, tHrp.Position)
-    bg.Parent = hrp
+        -- Ghost Mode
+        if dist > CONFIG.MaxDistance + 15 then
+            local behindPos = tHrp.CFrame:PointToWorldSpace(Vector3.new(0, 1, CONFIG.FollowDistance))
+            hrp.CFrame = CFrame.new(behindPos, tHrp.Position)
+            return
+        end
 
-    game.Debris:AddItem(bv, 0.1)
-    game.Debris:AddItem(bg, 0.1)
+        -- Auto Evade (ưu tiên cao nhất)
+        if CONFIG.EvadeEnabled and tick() - lastEvadeTime > CONFIG.EvadeCooldown then
+            local danger = false
+            -- Kiểm tra nhanh các vật thể nguy hiểm
+            for _, obj in pairs(workspace:GetChildren()) do
+                if obj:IsA("BasePart") and obj.Parent and obj.Parent:FindFirstChild("Humanoid") then
+                    local ohrp = obj.Parent:FindFirstChild("HumanoidRootPart")
+                    if ohrp and ohrp ~= hrp and ohrp.Parent ~= targetPlayer then
+                        local d = (hrp.Position - ohrp.Position).Magnitude
+                        if d < CONFIG.EvadeRange then
+                            danger = true
+                            break
+                        end
+                    end
+                end
+            end
+            if danger then
+                local dir = (hrp.Position - tHrp.Position).Unit
+                local evadePos = hrp.Position + dir * CONFIG.EvadeDistance + Vector3.new(0, 8, 0)
+                hrp.CFrame = CFrame.new(evadePos, tHrp.Position)
+                lastEvadeTime = tick()
+                return  -- Nhảy ra khỏi vòng lặp để không bị kéo ngược
+            end
+        end
 
-    if CONFIG.ShowDistance then
-        statusText.Text = "Đang bám: " .. targetPlayer.DisplayName .. " (" .. math.floor(dist) .. "m)"
-    end
-end)
+        -- Tính vị trí mới
+        local targetPos
+        local lookAt = tHrp.Position
+
+        if CONFIG.Mode == "orbit" then
+            orbitAngle = orbitAngle + (CONFIG.OrbitSpeed * 0.05)
+            local radius = CONFIG.OrbitRadius
+            local x = math.cos(orbitAngle) * radius
+            local z = math.sin(orbitAngle) * radius
+            targetPos = tHrp.Position + Vector3.new(x, 1, z)
+            lookAt = tHrp.Position
+        else
+            targetPos = tHrp.CFrame:PointToWorldSpace(Vector3.new(0, 1, CONFIG.FollowDistance))
+            lookAt = tHrp.Position
+        end
+
+        -- Xóa body cũ
+        for _, v in pairs(hrp:GetChildren()) do
+            if v:IsA("BodyVelocity") or v:IsA("BodyGyro") then
+                v:Destroy()
+            end
+        end
+
+        -- BodyVelocity
+        local direction = targetPos - hrp.Position
+        local bv = Instance.new("BodyVelocity")
+        bv.MaxForce = Vector3.new(1e8, 1e8, 1e8)
+        bv.Velocity = direction * CONFIG.Speed
+        bv.Parent = hrp
+
+        -- BodyGyro
+        local bg = Instance.new("BodyGyro")
+        bg.MaxTorque = Vector3.new(1e8, 1e8, 1e8)
+        bg.CFrame = CFrame.new(hrp.Position, lookAt)
+        bg.Parent = hrp
+
+        game.Debris:AddItem(bv, 0.1)
+        game.Debris:AddItem(bg, 0.1)
+
+        if CONFIG.ShowDistance and statusTextLabel then
+            local modeText = CONFIG.Mode == "orbit" and "🔄 Vòng" or "⬆ Sau lưng"
+            statusTextLabel.Text = modeText .. " " .. targetPlayer.DisplayName .. " (" .. math.floor(dist) .. "m)"
+        end
+    end)
+end
 
 -- ==================== PHÍM TẮT ====================
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
+
     if input.KeyCode == Enum.KeyCode.F5 then
-        main.Visible = not main.Visible
-        if main.Visible then
-            updatePlayerList()
+        if guiMain then
+            guiMain.Visible = not guiMain.Visible
+            if guiMain.Visible then
+                local scroll = guiMain:FindFirstChild("PlayerScroll", true)
+                if scroll then updatePlayerList(scroll) end
+            end
         end
     elseif input.KeyCode == Enum.KeyCode.F6 then
         toggleChase()
-    end
-end)
-
--- ==================== BIND BUTTONS ====================
-toggleBtn.MouseButton1Click:Connect(toggleChase)
-
-noclipBtn.MouseButton1Click:Connect(function()
-    if noclipEnabled then
-        noclipEnabled = false
-        noclipBtn.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
-        noclipBtn.Text = "Noclip OFF"
-    else
-        noclip()
-        noclipBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
-        noclipBtn.Text = "Noclip ON"
-    end
-end)
-
-invisibleBtn.MouseButton1Click:Connect(function()
-    if isInvisible then
-        isInvisible = false
-        invisibleBtn.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
-        invisibleBtn.Text = "👻 Ẩn OFF"
-        invisibleBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
-        toggleInvisible(false)
-    else
-        isInvisible = true
-        invisibleBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
-        invisibleBtn.Text = "👻 Ẩn ON"
-        invisibleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        toggleInvisible(true)
+    elseif input.KeyCode == Enum.KeyCode.F7 then
+        -- Đổi chế độ bay
+        if CONFIG.Mode == "follow" then
+            CONFIG.Mode = "orbit"
+            if modeBtn then
+                modeBtn.Text = "Vòng quanh"
+                modeBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 100)
+            end
+            notify("🔄 Chuyển sang VÒNG QUANH")
+        else
+            CONFIG.Mode = "follow"
+            if modeBtn then
+                modeBtn.Text = "Sau lưng"
+                modeBtn.BackgroundColor3 = Color3.fromRGB(255, 200, 50)
+            end
+            notify("🔄 Chuyển sang SAU LƯNG")
+        end
     end
 end)
 
 -- ==================== KHỞI TẠO ====================
-updatePlayerList()
-notify("⚡ JJK Chase Omega loaded! F5: Mở GUI | F6: Bật/Tắt")
+local screenGui, scroll = createGUI()
+updatePlayerList(scroll)
+flyLoop()
+notify("🔥 Universal Chase Omega V4 loaded! F5: GUI | F6: Bật/Tắt | F7: Đổi chế độ bay")
+
+-- Gán nút bấm
+task.wait(0.5)
+
+local noclipBtn = guiMain and guiMain:FindFirstChild("NoclipBtn", true)
+if noclipBtn then
+    noclipBtn.MouseButton1Click:Connect(function()
+        if noclipEnabled then
+            toggleNoclip(false)
+            noclipBtn.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+            noclipBtn.Text = "Noclip OFF"
+        else
+            toggleNoclip(true)
+            noclipBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+            noclipBtn.Text = "Noclip ON"
+        end
+    end)
+end
+
+local invisibleBtn = guiMain and guiMain:FindFirstChild("InvisibleBtn", true)
+if invisibleBtn then
+    invisibleBtn.MouseButton1Click:Connect(function()
+        if isInvisible then
+            toggleInvisible(false)
+            invisibleBtn.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+            invisibleBtn.Text = "👻 Ẩn OFF"
+            invisibleBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+        else
+            toggleInvisible(true)
+            invisibleBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+            invisibleBtn.Text = "👻 Ẩn ON"
+            invisibleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        end
+    end)
+end
